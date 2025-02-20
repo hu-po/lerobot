@@ -134,6 +134,9 @@ venv/
 env.bak/
 venv.bak/
 
+# Don't ignore lerobot/config/env/*
+!lerobot/config/env/*
+
 # Spyder project settings
 .spyderproject
 .spyproject
