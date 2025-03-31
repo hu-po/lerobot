@@ -654,7 +654,7 @@ class TrossenAISoloRobotConfig(ManipulatorRobotConfig):
     cameras: dict[str, CameraConfig] = field(
         default_factory=lambda: {
             "cam_high": IntelRealSenseCameraConfig(
-                serial_number=218622274938,
+                serial_number=218622278376,
                 fps=30,
                 width=640,
                 height=480,
