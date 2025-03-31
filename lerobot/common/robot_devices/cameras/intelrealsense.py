@@ -381,7 +381,7 @@ class IntelRealSenseCamera:
 
         start_time = time.perf_counter()
 
-        frame = self.camera.wait_for_frames(timeout_ms=5000)
+        frame = self.camera.wait_for_frames(timeout_ms=8000)
 
         color_frame = frame.get_color_frame()
 
