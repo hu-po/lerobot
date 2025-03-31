@@ -76,6 +76,7 @@ class TrossenArmDriver:
         self.is_connected = False
         self.logs = {}
         self.fps = 30
+        self.gripper_force_limit_scaling_factor = 0.1
         self.home_pose = [0, np.pi/12, np.pi/12, 0, 0, 0, 0]
         self.sleep_pose = [0, 0, 0, 0, 0, 0, 0]
 
@@ -130,6 +131,9 @@ class TrossenArmDriver:
                 f"Failed to configure the driver for the {self.model} arm at {self.ip}."
             )
             raise
+
+        # Set the gripper force limit scaling factor
+        self.driver.set_gripper_force_limit_scaling_factor(self.gripper_force_limit_scaling_factor)
 
         # Move the arms to the home pose
         self.driver.set_all_modes(trossen.Mode.position)
