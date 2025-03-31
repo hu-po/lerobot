@@ -13,6 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import contextlib
 import logging
 import shutil
 from pathlib import Path
@@ -27,6 +28,7 @@ import torch.utils
 from datasets import concatenate_datasets, load_dataset
 from huggingface_hub import HfApi, snapshot_download
 from huggingface_hub.constants import REPOCARD_NAME
+from huggingface_hub.errors import RevisionNotFoundError
 
 from lerobot.common.constants import HF_LEROBOT_HOME
 from lerobot.common.datasets.compute_stats import aggregate_stats, compute_episode_stats
@@ -65,8 +67,9 @@ from lerobot.common.datasets.utils import (
 )
 from lerobot.common.datasets.video_utils import (
     VideoFrame,
-    decode_video_frames_torchvision,
+    decode_video_frames,
     encode_video_frames,
+    get_safe_default_codec,
     get_video_info,
 )
 from lerobot.common.robot_devices.robots.utils import Robot
@@ -226,7 +229,7 @@ class LeRobotDatasetMetadata:
 
     def add_task(self, task: str):
         """
-        Given a task in natural language, add it to the dictionnary of tasks.
+        Given a task in natural language, add it to the dictionary of tasks.
         """
         if task in self.task_to_task_index:
             raise ValueError(f"The task '{task}' already exists and can't be added twice.")
@@ -389,7 +392,7 @@ class LeRobotDataset(torch.utils.data.Dataset):
                 - info contains various information about the dataset like shapes, keys, fps etc.
                 - stats stores the dataset statistics of the different modalities for normalization
                 - tasks contains the prompts for each task of the dataset, which can be used for
-                  task-conditionned training.
+                  task-conditioned training.
             - hf_dataset (from datasets.Dataset), which will read any values from parquet files.
             - videos (optional) from which frames are loaded to be synchronous with data from parquet files.
 
@@ -460,8 +463,8 @@ class LeRobotDataset(torch.utils.data.Dataset):
             download_videos (bool, optional): Flag to download the videos. Note that when set to True but the
                 video files are already present on local disk, they won't be downloaded again. Defaults to
                 True.
-            video_backend (str | None, optional): Video backend to use for decoding videos. There is currently
-                a single option which is the pyav decoder used by Torchvision. Defaults to pyav.
+            video_backend (str | None, optional): Video backend to use for decoding videos. Defaults to torchcodec when available int the platform; otherwise, defaults to 'pyav'.
+                You can also use the 'pyav' decoder used by Torchvision, which used to be the default option, or 'video_reader' which is another decoder of Torchvision.
         """
         super().__init__()
         self.repo_id = repo_id
@@ -471,7 +474,7 @@ class LeRobotDataset(torch.utils.data.Dataset):
         self.episodes = episodes
         self.tolerance_s = tolerance_s
         self.revision = revision if revision else CODEBASE_VERSION
-        self.video_backend = video_backend if video_backend else "pyav"
+        self.video_backend = video_backend if video_backend else get_safe_default_codec()
         self.delta_indices = None
 
         # Unused attributes
@@ -517,6 +520,7 @@ class LeRobotDataset(torch.utils.data.Dataset):
         branch: str | None = None,
         tags: list | None = None,
         license: str | None = "apache-2.0",
+        tag_version: bool = True,
         push_videos: bool = True,
         private: bool = False,
         allow_patterns: list[str] | str | None = None,
@@ -561,6 +565,11 @@ class LeRobotDataset(torch.utils.data.Dataset):
                 tags=tags, dataset_info=self.meta.info, license=license, **card_kwargs
             )
             card.push_to_hub(repo_id=self.repo_id, repo_type="dataset", revision=branch)
+
+        if tag_version:
+            with contextlib.suppress(RevisionNotFoundError):
+                hub_api.delete_tag(self.repo_id, tag=CODEBASE_VERSION, repo_type="dataset")
+            hub_api.create_tag(self.repo_id, tag=CODEBASE_VERSION, revision=branch, repo_type="dataset")
 
     def pull_from_repo(
         self,
@@ -699,9 +708,7 @@ class LeRobotDataset(torch.utils.data.Dataset):
         item = {}
         for vid_key, query_ts in query_timestamps.items():
             video_path = self.root / self.meta.get_video_file_path(ep_idx, vid_key)
-            frames = decode_video_frames_torchvision(
-                video_path, query_ts, self.tolerance_s, self.video_backend
-            )
+            frames = decode_video_frames(video_path, query_ts, self.tolerance_s, self.video_backend)
             item[vid_key] = frames.squeeze(0)
 
         return item
@@ -848,7 +855,7 @@ class LeRobotDataset(torch.utils.data.Dataset):
         episode_buffer["index"] = np.arange(self.meta.total_frames, self.meta.total_frames + episode_length)
         episode_buffer["episode_index"] = np.full((episode_length,), episode_index)
 
-        # Add new tasks to the tasks dictionnary
+        # Add new tasks to the tasks dictionary
         for task in episode_tasks:
             task_index = self.meta.get_task_index(task)
             if task_index is None:
@@ -1021,7 +1028,7 @@ class LeRobotDataset(torch.utils.data.Dataset):
         obj.delta_timestamps = None
         obj.delta_indices = None
         obj.episode_data_index = None
-        obj.video_backend = video_backend if video_backend is not None else "pyav"
+        obj.video_backend = video_backend if video_backend is not None else get_safe_default_codec()
         return obj
 
 
