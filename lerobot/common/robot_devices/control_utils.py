@@ -288,6 +288,8 @@ def reset_environment(robot, events, reset_time_s, fps):
     if has_method(robot, "teleop_safety_stop"):
         robot.teleop_safety_stop()
 
+    if robot.robot_type in ["trossen_ai_stationary", "trossen_ai_solo"]:
+        time.sleep(reset_time_s)
     control_loop(
         robot=robot,
         control_time_s=reset_time_s,
