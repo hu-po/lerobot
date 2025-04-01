@@ -139,7 +139,7 @@ class TrossenArmDriver:
         # Move the arms to the home pose
         self.driver.set_all_modes(trossen.Mode.position)
         self.driver.set_all_positions(self.home_pose, 2.0, False)
-        self.driver.set_all_positions(self.pick_pose, 2.0, False)
+        # self.driver.set_all_positions(self.pick_pose, 2.0, False)
 
         # Allow to read and write
         self.is_connected = True
@@ -252,7 +252,7 @@ class TrossenArmDriver:
         elif data_name == "Reset":
             self.driver.set_all_modes(trossen.Mode.position)
             self.driver.set_all_positions(self.home_pose, 2.0, False)
-            self.driver.set_all_positions(self.pick_pose, 2.0, False)
+            # self.driver.set_all_positions(self.pick_pose, 2.0, False)
         else:
             print(f"Data name: {data_name} value: {values} is not supported for writing.")
 
