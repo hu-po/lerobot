@@ -78,6 +78,7 @@ class TrossenArmDriver:
         self.fps = 30
         self.gripper_force_limit_scaling_factor = 0.1
         self.home_pose = [0, np.pi/12, np.pi/12, 0, 0, 0, 0]
+        self.pick_pose = [0, 1.55, 1.10, -0.78, 0, 0, 0.02, 0.02]
         self.sleep_pose = [0, 0, 0, 0, 0, 0, 0]
 
         self.motors={
@@ -138,6 +139,7 @@ class TrossenArmDriver:
         # Move the arms to the home pose
         self.driver.set_all_modes(trossen.Mode.position)
         self.driver.set_all_positions(self.home_pose, 2.0, False)
+        self.driver.set_all_positions(self.pick_pose, 2.0, False)
 
         # Allow to read and write
         self.is_connected = True
@@ -250,6 +252,7 @@ class TrossenArmDriver:
         elif data_name == "Reset":
             self.driver.set_all_modes(trossen.Mode.position)
             self.driver.set_all_positions(self.home_pose, 2.0, False)
+            self.driver.set_all_positions(self.pick_pose, 2.0, False)
         else:
             print(f"Data name: {data_name} value: {values} is not supported for writing.")
 
