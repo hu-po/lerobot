@@ -78,7 +78,7 @@ class TrossenArmDriver:
         self.fps = 30
         self.gripper_force_limit_scaling_factor = 0.1
         self.home_pose = [0, np.pi/12, np.pi/12, 0, 0, 0, 0]
-        self.pick_pose = [0, 1.55, 1.10, -0.78, 0, 0, 0.02, 0.02]
+        self.pick_pose = [0, 1.55, 1.10, -0.78, 0, 0, 0.02]
         self.sleep_pose = [0, 0, 0, 0, 0, 0, 0]
 
         self.motors={
