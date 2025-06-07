@@ -73,22 +73,27 @@ class Tatbot(Robot):
         if self.is_connected:
             raise DeviceAlreadyConnectedError(f"{self} already connected")
 
-        self.driver_l = trossen_arm.TrossenArmDriver()
-        self.driver_l.configure(
-            trossen_arm.Model.wxai_v0,
-            trossen_arm.StandardEndEffector.wxai_v0_leader,
-            self.config.ip_address_l,
-            False, # clear_error
-        )
-        self.driver_l.set_all_modes(trossen_arm.Mode.position)
-        self.driver_r = trossen_arm.TrossenArmDriver()
-        self.driver_r.configure(
-            trossen_arm.Model.wxai_v0,
-            trossen_arm.StandardEndEffector.wxai_v0_follower,
-            self.config.ip_address_r,
-            False, # clear_error
-        )
-        self.driver_r.set_all_modes(trossen_arm.Mode.position)
+        try:
+            self.driver_l = trossen_arm.TrossenArmDriver()
+            self.driver_l.configure(
+                trossen_arm.Model.wxai_v0,
+                trossen_arm.StandardEndEffector.wxai_v0_leader,
+                self.config.ip_address_l,
+                False, # clear_error
+            )
+            self.driver_l.set_all_modes(trossen_arm.Mode.position)
+            self.driver_r = trossen_arm.TrossenArmDriver()
+            self.driver_r.configure(
+                trossen_arm.Model.wxai_v0,
+                trossen_arm.StandardEndEffector.wxai_v0_follower,
+                self.config.ip_address_r,
+                False, # clear_error
+            )
+            self.driver_r.set_all_modes(trossen_arm.Mode.position)
+        except Exception as e:
+            logger.error(f"Failed to connect to {self}: {e}")
+            self.driver_l = None
+            self.driver_r = None
 
         for cam in self.cameras.values():
             cam.connect()
@@ -147,7 +152,7 @@ class Tatbot(Robot):
             trossen_arm.VectorDouble(joint_pos_r),
             blocking=False,
         )
-        
+
         return {f"{joint}.pos": val for joint, val in goal_pos.items()}
 
     def disconnect(self):
