@@ -24,11 +24,28 @@ MAX_STEPS = 100
 i = 0
 while i < MAX_STEPS:
 
-    action_sent = robot.send_action({})
+    action_sent = robot.send_action({
+        "left.joint_0": 0.0,
+        "left.joint_1": 0.0,
+        "left.joint_2": 0.0,
+        "left.joint_3": 0.0,
+        "left.joint_4": 0.0,
+        "left.joint_5": 0.0,
+        "left.left_carriage_joint": 0.0,
+        "left.right_carriage_joint": 0.0,
+        "right.joint_0": 0.0,
+        "right.joint_1": 0.0,
+        "right.joint_2": 0.0,
+        "right.joint_3": 0.0,
+        "right.joint_4": 0.0,
+        "right.joint_5": 0.0,
+        "right.left_carriage_joint": 0.0,
+        "right.right_carriage_joint": 0.0,
+    })
     observation = robot.get_observation()
 
     frame = {**action_sent, **observation}
-    task = "Dummy Example Task Dataset"
+    task = "Sleeping"
 
     dataset.add_frame(frame, task)
     i += 1
