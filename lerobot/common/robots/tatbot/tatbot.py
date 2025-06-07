@@ -142,8 +142,8 @@ class Tatbot(Robot):
         
         goal_pos = {key.removesuffix(".pos"): val for key, val in action.items() if key.endswith(".pos")}
 
-        joint_pos_l = [goal_pos[joint] for joint in self.joints[:7]]
-        joint_pos_r = [goal_pos[joint] for joint in self.joints[7:]]
+        joint_pos_l = [goal_pos[joint] for joint in self.joints[:8]]
+        joint_pos_r = [goal_pos[joint] for joint in self.joints[8:]]
         self.driver_l.set_all_positions(
             trossen_arm.VectorDouble(joint_pos_l),
             blocking=False,

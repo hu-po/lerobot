@@ -25,22 +25,22 @@ i = 0
 while i < MAX_STEPS:
 
     action_sent = robot.send_action({
-        "left.joint_0": 0.0,
-        "left.joint_1": 0.0,
-        "left.joint_2": 0.0,
-        "left.joint_3": 0.0,
-        "left.joint_4": 0.0,
-        "left.joint_5": 0.0,
-        "left.left_carriage_joint": 0.0,
-        "left.right_carriage_joint": 0.0,
-        "right.joint_0": 0.0,
-        "right.joint_1": 0.0,
-        "right.joint_2": 0.0,
-        "right.joint_3": 0.0,
-        "right.joint_4": 0.0,
-        "right.joint_5": 0.0,
-        "right.left_carriage_joint": 0.0,
-        "right.right_carriage_joint": 0.0,
+        "left.joint_0.pos": 0.0,
+        "left.joint_1.pos": 0.0,
+        "left.joint_2.pos": 0.0,
+        "left.joint_3.pos": 0.0,
+        "left.joint_4.pos": 0.0,
+        "left.joint_5.pos": 0.0,
+        "left.left_carriage_joint.pos": 0.0,
+        "left.right_carriage_joint.pos": 0.0,
+        "right.joint_0.pos": 0.0,
+        "right.joint_1.pos": 0.0,
+        "right.joint_2.pos": 0.0,
+        "right.joint_3.pos": 0.0,
+        "right.joint_4.pos": 0.0,
+        "right.joint_5.pos": 0.0,
+        "right.left_carriage_joint.pos": 0.0,
+        "right.right_carriage_joint.pos": 0.0,
     })
     observation = robot.get_observation()
 
