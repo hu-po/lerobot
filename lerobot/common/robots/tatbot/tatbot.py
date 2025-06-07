@@ -32,16 +32,14 @@ class Tatbot(Robot):
             "left.joint_3",
             "left.joint_4",
             "left.joint_5",
-            "left.left_carriage_joint",
-            "left.right_carriage_joint",
+            "left.gripper",
             "right.joint_0",
             "right.joint_1",
             "right.joint_2",
             "right.joint_3",
             "right.joint_4",
             "right.joint_5",
-            "right.left_carriage_joint",
-            "right.right_carriage_joint",
+            "right.gripper",
         ]
         self.driver_l = None
         self.driver_r = None
@@ -142,8 +140,8 @@ class Tatbot(Robot):
         
         goal_pos = {key.removesuffix(".pos"): val for key, val in action.items() if key.endswith(".pos")}
 
-        joint_pos_l = [goal_pos[joint] for joint in self.joints[:8]]
-        joint_pos_r = [goal_pos[joint] for joint in self.joints[8:]]
+        joint_pos_l = [goal_pos[joint] for joint in self.joints[:7]]
+        joint_pos_r = [goal_pos[joint] for joint in self.joints[7:]]
         self.driver_l.set_all_positions(
             trossen_arm.VectorDouble(joint_pos_l),
             blocking=False,

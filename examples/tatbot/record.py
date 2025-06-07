@@ -31,16 +31,14 @@ while i < MAX_STEPS:
         "left.joint_3.pos": 0.0,
         "left.joint_4.pos": 0.0,
         "left.joint_5.pos": 0.0,
-        "left.left_carriage_joint.pos": 0.0,
-        "left.right_carriage_joint.pos": 0.0,
+        "left.gripper.pos": 0.0,
         "right.joint_0.pos": 0.0,
         "right.joint_1.pos": 0.0,
         "right.joint_2.pos": 0.0,
         "right.joint_3.pos": 0.0,
         "right.joint_4.pos": 0.0,
         "right.joint_5.pos": 0.0,
-        "right.left_carriage_joint.pos": 0.0,
-        "right.right_carriage_joint.pos": 0.0,
+        "right.gripper.pos": 0.0,
     })
     observation = robot.get_observation()
 
