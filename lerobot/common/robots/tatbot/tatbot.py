@@ -36,7 +36,7 @@ logger = logging.getLogger(__name__)
 
 class Tatbot(Robot):
     """
-    [Tatbot](https://github.com/TheRobotStudio/SO-ARM100) designed by TheRobotStudio
+    [Tatbot](https://github.com/hu-po/tatbot)
     """
 
     config_class = TatbotConfig

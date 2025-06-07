@@ -1,7 +1,6 @@
 from dataclasses import dataclass, field
 
 from lerobot.common.cameras import CameraConfig
-from lerobot.common.cameras.opencv import OpenCVCameraConfig
 from lerobot.common.cameras.realsense import RealSenseCameraConfig
 
 from ..config import RobotConfig
@@ -23,13 +22,7 @@ class TatbotConfig(RobotConfig):
     # cameras
     cameras: dict[str, CameraConfig] = field(
         default_factory=lambda: {
-            "navigation": OpenCVCameraConfig(
-                index_or_path="/dev/hello-nav-head-camera",
-                fps=10,
-                width=1280,
-                height=720,
-                rotation=-90,
-            ),
+            # TODO(hupo): add RTSP cameras
             "head": RealSenseCameraConfig(
                 name="Intel RealSense D435I",
                 fps=30,
