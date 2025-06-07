@@ -1,19 +1,3 @@
-#!/usr/bin/env python
-
-# Copyright 2024 The HuggingFace Inc. team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 import logging
 import time
 from functools import cached_property
@@ -21,14 +5,10 @@ from typing import Any
 
 from lerobot.common.cameras.utils import make_cameras_from_configs
 from lerobot.common.errors import DeviceAlreadyConnectedError, DeviceNotConnectedError
-from lerobot.common.motors import Motor, MotorCalibration, MotorNormMode
-from lerobot.common.motors.feetech import (
-    FeetechMotorsBus,
-    OperatingMode,
-)
+
+import trossen_arm
 
 from ..robot import Robot
-from ..utils import ensure_safe_goal_position
 from .config_tatbot import TatbotConfig
 
 logger = logging.getLogger(__name__)
@@ -45,24 +25,31 @@ class Tatbot(Robot):
     def __init__(self, config: TatbotConfig):
         super().__init__(config)
         self.config = config
-        norm_mode_body = MotorNormMode.DEGREES if config.use_degrees else MotorNormMode.RANGE_M100_100
-        self.bus = FeetechMotorsBus(
-            port=self.config.port,
-            motors={
-                "shoulder_pan": Motor(1, "sts3215", norm_mode_body),
-                "shoulder_lift": Motor(2, "sts3215", norm_mode_body),
-                "elbow_flex": Motor(3, "sts3215", norm_mode_body),
-                "wrist_flex": Motor(4, "sts3215", norm_mode_body),
-                "wrist_roll": Motor(5, "sts3215", norm_mode_body),
-                "gripper": Motor(6, "sts3215", MotorNormMode.RANGE_0_100),
-            },
-            calibration=self.calibration,
-        )
+        self.joints = [
+            "left.joint_0",
+            "left.joint_1",
+            "left.joint_2",
+            "left.joint_3",
+            "left.joint_4",
+            "left.joint_5",
+            "left.left_carriage_joint",
+            "left.right_carriage_joint",
+            "right.joint_0",
+            "right.joint_1",
+            "right.joint_2",
+            "right.joint_3",
+            "right.joint_4",
+            "right.joint_5",
+            "right.left_carriage_joint",
+            "right.right_carriage_joint",
+        ]
+        self.driver_l = None
+        self.driver_r = None
         self.cameras = make_cameras_from_configs(config.cameras)
 
     @property
     def _motors_ft(self) -> dict[str, type]:
-        return {f"{motor}.pos": float for motor in self.bus.motors}
+        return {f"{joint}.pos": float for joint in self.joints}
 
     @property
     def _cameras_ft(self) -> dict[str, tuple]:
@@ -80,19 +67,28 @@ class Tatbot(Robot):
 
     @property
     def is_connected(self) -> bool:
-        return self.bus.is_connected and all(cam.is_connected for cam in self.cameras.values())
+        return self.driver_l is not None and self.driver_r is not None and all(cam.is_connected for cam in self.cameras.values())
 
     def connect(self, calibrate: bool = True) -> None:
-        """
-        We assume that at connection time, arm is in a rest position,
-        and torque can be safely disabled to run calibration.
-        """
         if self.is_connected:
             raise DeviceAlreadyConnectedError(f"{self} already connected")
 
-        self.bus.connect()
-        if not self.is_calibrated and calibrate:
-            self.calibrate()
+        self.driver_l = trossen_arm.TrossenArmDriver()
+        self.driver_l.configure(
+            trossen_arm.Model.wxai_v0,
+            trossen_arm.StandardEndEffector.wxai_v0_leader,
+            self.config.ip_address_l,
+            False, # clear_error
+        )
+        self.driver_l.set_all_modes(trossen_arm.Mode.position)
+        self.driver_r = trossen_arm.TrossenArmDriver()
+        self.driver_r.configure(
+            trossen_arm.Model.wxai_v0,
+            trossen_arm.StandardEndEffector.wxai_v0_follower,
+            self.config.ip_address_r,
+            False, # clear_error
+        )
+        self.driver_r.set_all_modes(trossen_arm.Mode.position)
 
         for cam in self.cameras.values():
             cam.connect()
@@ -102,57 +98,13 @@ class Tatbot(Robot):
 
     @property
     def is_calibrated(self) -> bool:
-        return self.bus.is_calibrated
+        return True
 
     def calibrate(self) -> None:
-        logger.info(f"\nRunning calibration of {self}")
-        self.bus.disable_torque()
-        for motor in self.bus.motors:
-            self.bus.write("Operating_Mode", motor, OperatingMode.POSITION.value)
-
-        input(f"Move {self} to the middle of its range of motion and press ENTER....")
-        homing_offsets = self.bus.set_half_turn_homings()
-
-        full_turn_motor = "wrist_roll"
-        unknown_range_motors = [motor for motor in self.bus.motors if motor != full_turn_motor]
-        print(
-            f"Move all joints except '{full_turn_motor}' sequentially through their "
-            "entire ranges of motion.\nRecording positions. Press ENTER to stop..."
-        )
-        range_mins, range_maxes = self.bus.record_ranges_of_motion(unknown_range_motors)
-        range_mins[full_turn_motor] = 0
-        range_maxes[full_turn_motor] = 4095
-
-        self.calibration = {}
-        for motor, m in self.bus.motors.items():
-            self.calibration[motor] = MotorCalibration(
-                id=m.id,
-                drive_mode=0,
-                homing_offset=homing_offsets[motor],
-                range_min=range_mins[motor],
-                range_max=range_maxes[motor],
-            )
-
-        self.bus.write_calibration(self.calibration)
-        self._save_calibration()
-        print("Calibration saved to", self.calibration_fpath)
+        pass
 
     def configure(self) -> None:
-        with self.bus.torque_disabled():
-            self.bus.configure_motors()
-            for motor in self.bus.motors:
-                self.bus.write("Operating_Mode", motor, OperatingMode.POSITION.value)
-                # Set P_Coefficient to lower value to avoid shakiness (Default is 32)
-                self.bus.write("P_Coefficient", motor, 16)
-                # Set I_Coefficient and D_Coefficient to default value 0 and 32
-                self.bus.write("I_Coefficient", motor, 0)
-                self.bus.write("D_Coefficient", motor, 32)
-
-    def setup_motors(self) -> None:
-        for motor in reversed(self.bus.motors):
-            input(f"Connect the controller board to the '{motor}' motor only and press enter.")
-            self.bus.setup_motor(motor)
-            print(f"'{motor}' motor id set to {self.bus.motors[motor].id}")
+        pass
 
     def get_observation(self) -> dict[str, Any]:
         if not self.is_connected:
@@ -160,8 +112,13 @@ class Tatbot(Robot):
 
         # Read arm position
         start = time.perf_counter()
-        obs_dict = self.bus.sync_read("Present_Position")
-        obs_dict = {f"{motor}.pos": val for motor, val in obs_dict.items()}
+        joint_pos_l = self.driver_l.get_all_positions()
+        joint_pos_r = self.driver_r.get_all_positions()
+        obs_dict = {}
+        for i, joint in enumerate(self.joints[:7]):
+            obs_dict[joint] = joint_pos_l[i]
+        for i, joint in enumerate(self.joints[7:]):
+            obs_dict[joint] = joint_pos_r[i]
         dt_ms = (time.perf_counter() - start) * 1e3
         logger.debug(f"{self} read state: {dt_ms:.1f}ms")
 
@@ -175,40 +132,30 @@ class Tatbot(Robot):
         return obs_dict
 
     def send_action(self, action: dict[str, Any]) -> dict[str, Any]:
-        """Command arm to move to a target joint configuration.
-
-        The relative action magnitude may be clipped depending on the configuration parameter
-        `max_relative_target`. In this case, the action sent differs from original action.
-        Thus, this function always returns the action actually sent.
-
-        Raises:
-            RobotDeviceNotConnectedError: if robot is not connected.
-
-        Returns:
-            the action sent to the motors, potentially clipped.
-        """
         if not self.is_connected:
             raise DeviceNotConnectedError(f"{self} is not connected.")
-
+        
         goal_pos = {key.removesuffix(".pos"): val for key, val in action.items() if key.endswith(".pos")}
 
-        # Cap goal position when too far away from present position.
-        # /!\ Slower fps expected due to reading from the follower.
-        if self.config.max_relative_target is not None:
-            present_pos = self.bus.sync_read("Present_Position")
-            goal_present_pos = {key: (g_pos, present_pos[key]) for key, g_pos in goal_pos.items()}
-            goal_pos = ensure_safe_goal_position(goal_present_pos, self.config.max_relative_target)
-
-        # Send goal position to the arm
-        self.bus.sync_write("Goal_Position", goal_pos)
-        return {f"{motor}.pos": val for motor, val in goal_pos.items()}
+        joint_pos_l = [goal_pos[joint] for joint in self.joints[:7]]
+        joint_pos_r = [goal_pos[joint] for joint in self.joints[7:]]
+        self.driver_l.set_all_positions(
+            trossen_arm.VectorDouble(joint_pos_l),
+            blocking=False,
+        )
+        self.driver_r.set_all_positions(
+            trossen_arm.VectorDouble(joint_pos_r),
+            blocking=False,
+        )
+        
+        return {f"{joint}.pos": val for joint, val in goal_pos.items()}
 
     def disconnect(self):
         if not self.is_connected:
             raise DeviceNotConnectedError(f"{self} is not connected.")
-
-        self.bus.disconnect(self.config.disable_torque_on_disconnect)
+        if self.config.disable_torque_on_disconnect:
+            self.driver_l.set_all_modes(trossen_arm.Mode.idle)
+            self.driver_r.set_all_modes(trossen_arm.Mode.idle)
         for cam in self.cameras.values():
             cam.disconnect()
-
         logger.info(f"{self} disconnected.")
