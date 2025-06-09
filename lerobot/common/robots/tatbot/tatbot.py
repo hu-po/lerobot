@@ -119,9 +119,9 @@ class Tatbot(Robot):
         joint_pos_r = self.driver_r.get_all_positions()
         obs_dict = {}
         for i, joint in enumerate(self.joints[:7]):
-            obs_dict[joint] = joint_pos_l[i]
+            obs_dict[f"{joint}.pos"] = joint_pos_l[i]
         for i, joint in enumerate(self.joints[7:]):
-            obs_dict[joint] = joint_pos_r[i]
+            obs_dict[f"{joint}.pos"] = joint_pos_r[i]
         dt_ms = (time.perf_counter() - start) * 1e3
         logger.debug(f"{self} read state: {dt_ms:.1f}ms")
 
