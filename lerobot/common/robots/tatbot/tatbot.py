@@ -97,10 +97,12 @@ class Tatbot(Robot):
             if self.config.ready_on_connect:
                 self.driver_l.set_all_positions(
                     trossen_arm.VectorDouble(self.joint_pos_ready_l),
+                    goal_time=self.config.goal_time_ready_sleep,
                     blocking=True,
                 )
                 self.driver_r.set_all_positions(
                     trossen_arm.VectorDouble(self.joint_pos_ready_r),
+                    goal_time=self.config.goal_time_ready_sleep,
                     blocking=True,
                 )
         except Exception as e:
@@ -159,11 +161,13 @@ class Tatbot(Robot):
         joint_pos_r = [goal_pos[joint] for joint in self.joints[7:]]
         self.driver_l.set_all_positions(
             trossen_arm.VectorDouble(joint_pos_l),
-            blocking=False,
+            goal_time=self.config.goal_time_action,
+            blocking=False, # do not block on left arm
         )
         self.driver_r.set_all_positions(
             trossen_arm.VectorDouble(joint_pos_r),
-            blocking=False,
+            goal_time=self.config.goal_time_action,
+            blocking=True, # block on right arm
         )
 
         return {f"{joint}.pos": val for joint, val in goal_pos.items()}
@@ -172,15 +176,26 @@ class Tatbot(Robot):
         if not self.is_connected:
             raise DeviceNotConnectedError(f"{self} is not connected.")
         if self.config.sleep_on_disconnect:
+            logger.info(f"{self} going to ready position.")
+            self.driver_r.set_all_positions(
+                trossen_arm.VectorDouble(self.joint_pos_ready_r),
+                goal_time=self.config.goal_time_ready_sleep,
+                blocking=True,
+            )
+            self.driver_l.set_all_positions(
+                trossen_arm.VectorDouble(self.joint_pos_ready_l),
+                goal_time=self.config.goal_time_ready_sleep,
+                blocking=True,
+            )
             logger.info(f"{self} going to sleep position.")
             self.driver_r.set_all_positions(
                 trossen_arm.VectorDouble(self.joint_pos_sleep_r),
-                goal_time=3.0, # 3 seconds to calmly reach sleep position
+                goal_time=self.config.goal_time_ready_sleep,
                 blocking=True,
             )
             self.driver_l.set_all_positions(
                 trossen_arm.VectorDouble(self.joint_pos_sleep_l),
-                goal_time=3.0, # 3 seconds to calmly reach sleep position
+                goal_time=self.config.goal_time_ready_sleep,
                 blocking=True,
             )
         if self.config.disable_torque_on_disconnect:
