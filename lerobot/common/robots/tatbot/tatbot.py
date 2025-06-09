@@ -156,6 +156,15 @@ class Tatbot(Robot):
     def disconnect(self):
         if not self.is_connected:
             raise DeviceNotConnectedError(f"{self} is not connected.")
+        if self.config.sleep_on_disconnect:
+            self.driver_l.set_all_positions(
+                trossen_arm.VectorDouble([0.0] * 7),
+                blocking=False,
+            )
+            self.driver_r.set_all_positions(
+                trossen_arm.VectorDouble([0.0] * 7),
+                blocking=False,
+            )
         if self.config.disable_torque_on_disconnect:
             self.driver_l.set_all_modes(trossen_arm.Mode.idle)
             self.driver_r.set_all_modes(trossen_arm.Mode.idle)

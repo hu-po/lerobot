@@ -9,8 +9,10 @@ from ..config import RobotConfig
 @RobotConfig.register_subclass("tatbot")
 @dataclass
 class TatbotConfig(RobotConfig):
-    
+    sleep_on_disconnect: bool = True
+    """Go to sleep position on robot disconnect."""
     disable_torque_on_disconnect: bool = True
+    """Disable motor torques on robot disconnect."""
 
     ip_address_l: str = "192.168.1.2"
     """IP address of the left robot arm."""
