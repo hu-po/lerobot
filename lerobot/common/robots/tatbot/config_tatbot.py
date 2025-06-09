@@ -16,9 +16,9 @@ class TatbotConfig(RobotConfig):
     disable_torque_on_disconnect: bool = True
     """Disable motor torques on robot disconnect."""
 
-    ip_address_l: str = "192.168.1.2"
+    ip_address_l: str = "192.168.1.3"
     """IP address of the left robot arm."""
-    ip_address_r: str = "192.168.1.3"
+    ip_address_r: str = "192.168.1.2"
     """IP address of the right robot arm."""
 
     # cameras

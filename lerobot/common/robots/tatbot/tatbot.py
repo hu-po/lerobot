@@ -173,12 +173,14 @@ class Tatbot(Robot):
             raise DeviceNotConnectedError(f"{self} is not connected.")
         if self.config.sleep_on_disconnect:
             logger.info(f"{self} going to sleep position.")
-            self.driver_l.set_all_positions(
-                trossen_arm.VectorDouble(self.joint_pos_sleep_l),
-                blocking=True,
-            )
             self.driver_r.set_all_positions(
                 trossen_arm.VectorDouble(self.joint_pos_sleep_r),
+                goal_time=3.0, # 3 seconds to calmly reach sleep position
+                blocking=True,
+            )
+            self.driver_l.set_all_positions(
+                trossen_arm.VectorDouble(self.joint_pos_sleep_l),
+                goal_time=3.0, # 3 seconds to calmly reach sleep position
                 blocking=True,
             )
         if self.config.disable_torque_on_disconnect:
