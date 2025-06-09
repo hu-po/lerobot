@@ -41,6 +41,12 @@ class Tatbot(Robot):
             "right.joint_5",
             "right.gripper",
         ]
+        # arms are folded up and rotated 
+        self.joint_pos_sleep_l = [0.0] * 7
+        self.joint_pos_sleep_r = [0.0] * 7
+        # arms are folded up and rotated inwards 0.2 radians
+        self.joint_pos_ready_l = [1.5708 - 0.2] + [0.0] * 6
+        self.joint_pos_ready_r = [1.5708 + 0.2] + [0.0] * 6
         self.driver_l = None
         self.driver_r = None
         self.cameras = make_cameras_from_configs(config.cameras)
@@ -88,6 +94,15 @@ class Tatbot(Robot):
                 False, # clear_error
             )
             self.driver_r.set_all_modes(trossen_arm.Mode.position)
+            if self.config.ready_on_connect:
+                self.driver_l.set_all_positions(
+                    trossen_arm.VectorDouble(self.joint_pos_ready_l),
+                    blocking=True,
+                )
+                self.driver_r.set_all_positions(
+                    trossen_arm.VectorDouble(self.joint_pos_ready_r),
+                    blocking=True,
+                )
         except Exception as e:
             logger.error(f"Failed to connect to {self}: {e}")
             self.driver_l = None
@@ -159,12 +174,12 @@ class Tatbot(Robot):
         if self.config.sleep_on_disconnect:
             logger.info(f"{self} going to sleep position.")
             self.driver_l.set_all_positions(
-                trossen_arm.VectorDouble([0.0] * 7),
-                blocking=False,
+                trossen_arm.VectorDouble(self.joint_pos_sleep_l),
+                blocking=True,
             )
             self.driver_r.set_all_positions(
-                trossen_arm.VectorDouble([0.0] * 7),
-                blocking=False,
+                trossen_arm.VectorDouble(self.joint_pos_sleep_r),
+                blocking=True,
             )
         if self.config.disable_torque_on_disconnect:
             logger.info(f"{self} disabling motor torques.")

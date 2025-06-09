@@ -9,6 +9,8 @@ from ..config import RobotConfig
 @RobotConfig.register_subclass("tatbot")
 @dataclass
 class TatbotConfig(RobotConfig):
+    ready_on_connect: bool = True
+    """Go to ready position on robot connect."""
     sleep_on_disconnect: bool = True
     """Go to sleep position on robot disconnect."""
     disable_torque_on_disconnect: bool = True
