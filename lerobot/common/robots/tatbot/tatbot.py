@@ -45,8 +45,8 @@ class Tatbot(Robot):
         self.joint_pos_sleep_l = [0.0] * 7
         self.joint_pos_sleep_r = [0.0] * 7
         # arms are folded up and rotated inwards 0.2 radians
-        self.joint_pos_ready_l = [1.5708 - 0.2] + [0.0] * 6
-        self.joint_pos_ready_r = [1.5708 + 0.2] + [0.0] * 6
+        self.joint_pos_ready_l = [1.5708 - 0.3] + [0.0] * 6
+        self.joint_pos_ready_r = [1.5708 + 0.3] + [0.0] * 6
         self.driver_l = None
         self.driver_r = None
         self.cameras = make_cameras_from_configs(config.cameras)
