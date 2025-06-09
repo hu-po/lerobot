@@ -6,7 +6,7 @@ from lerobot.common.cameras.realsense import RealSenseCameraConfig
 from ..config import RobotConfig
 
 
-@RobotConfig.register_subclass("tabot")
+@RobotConfig.register_subclass("tatbot")
 @dataclass
 class TatbotConfig(RobotConfig):
     
@@ -24,13 +24,13 @@ class TatbotConfig(RobotConfig):
                 fps=30,
                 width=640,
                 height=480,
-                serial_number_or_name="218622278376", # "realsense_b",
+                serial_number_or_name="218622278376", # realsense_b
             ),
             "wrist": RealSenseCameraConfig(
                 fps=30,
                 width=640,
                 height=480,
-                serial_number_or_name="230422273017", # "realsense_a",
+                serial_number_or_name="230422273017", # realsense_a
             ),
         }
     )
