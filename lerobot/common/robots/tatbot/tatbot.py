@@ -157,6 +157,7 @@ class Tatbot(Robot):
         if not self.is_connected:
             raise DeviceNotConnectedError(f"{self} is not connected.")
         if self.config.sleep_on_disconnect:
+            logger.info(f"{self} going to sleep position.")
             self.driver_l.set_all_positions(
                 trossen_arm.VectorDouble([0.0] * 7),
                 blocking=False,
@@ -166,6 +167,7 @@ class Tatbot(Robot):
                 blocking=False,
             )
         if self.config.disable_torque_on_disconnect:
+            logger.info(f"{self} disabling motor torques.")
             self.driver_l.set_all_modes(trossen_arm.Mode.idle)
             self.driver_r.set_all_modes(trossen_arm.Mode.idle)
         for cam in self.cameras.values():
