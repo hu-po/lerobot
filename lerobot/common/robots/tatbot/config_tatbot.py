@@ -15,7 +15,7 @@ class TatbotConfig(RobotConfig):
     """Go to sleep position on robot disconnect."""
     disable_torque_on_disconnect: bool = True
     """Disable motor torques on robot disconnect."""
-    goal_time_action: float = 2.0
+    goal_time_action: float = 1.0
     """Robot travel time when executing actions."""
     goal_time_ready_sleep: float = 3.0
     """Robot travel time when moving to sleep or ready positions."""

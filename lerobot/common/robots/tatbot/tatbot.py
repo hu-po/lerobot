@@ -51,6 +51,18 @@ class Tatbot(Robot):
         self.driver_r = None
         self.cameras = make_cameras_from_configs(config.cameras)
 
+    def _set_all_positions(self, joint_pos_l: list[float], joint_pos_r: list[float], goal_time: float = 0.1, blocking: bool = True) -> None:
+        self.driver_l.set_all_positions(
+            trossen_arm.VectorDouble(joint_pos_l),
+            goal_time=goal_time,
+            blocking=blocking,
+        )
+        self.driver_r.set_all_positions(
+            trossen_arm.VectorDouble(joint_pos_r),
+            goal_time=goal_time,
+            blocking=blocking,
+        )
+
     @property
     def _motors_ft(self) -> dict[str, type]:
         return {f"{joint}.pos": float for joint in self.joints}
@@ -95,16 +107,7 @@ class Tatbot(Robot):
             )
             self.driver_r.set_all_modes(trossen_arm.Mode.position)
             if self.config.ready_on_connect:
-                self.driver_l.set_all_positions(
-                    trossen_arm.VectorDouble(self.joint_pos_ready_l),
-                    goal_time=self.config.goal_time_ready_sleep,
-                    blocking=True,
-                )
-                self.driver_r.set_all_positions(
-                    trossen_arm.VectorDouble(self.joint_pos_ready_r),
-                    goal_time=self.config.goal_time_ready_sleep,
-                    blocking=True,
-                )
+                self._set_all_positions(self.joint_pos_ready_l, self.joint_pos_ready_r, self.config.goal_time_ready_sleep, True)
         except Exception as e:
             logger.error(f"Failed to connect to {self}: {e}")
             self.driver_l = None
@@ -159,17 +162,7 @@ class Tatbot(Robot):
 
         joint_pos_l = [goal_pos[joint] for joint in self.joints[:7]]
         joint_pos_r = [goal_pos[joint] for joint in self.joints[7:]]
-        self.driver_l.set_all_positions(
-            trossen_arm.VectorDouble(joint_pos_l),
-            goal_time=self.config.goal_time_action,
-            blocking=False, # do not block on left arm
-        )
-        self.driver_r.set_all_positions(
-            trossen_arm.VectorDouble(joint_pos_r),
-            goal_time=self.config.goal_time_action,
-            blocking=True, # block on right arm
-        )
-
+        self._set_all_positions(joint_pos_l, joint_pos_r, self.config.goal_time_action, False)
         return {f"{joint}.pos": val for joint, val in goal_pos.items()}
 
     def disconnect(self):
@@ -177,27 +170,9 @@ class Tatbot(Robot):
             raise DeviceNotConnectedError(f"{self} is not connected.")
         if self.config.sleep_on_disconnect:
             logger.info(f"{self} going to ready position.")
-            self.driver_r.set_all_positions(
-                trossen_arm.VectorDouble(self.joint_pos_ready_r),
-                goal_time=self.config.goal_time_ready_sleep,
-                blocking=True,
-            )
-            self.driver_l.set_all_positions(
-                trossen_arm.VectorDouble(self.joint_pos_ready_l),
-                goal_time=self.config.goal_time_ready_sleep,
-                blocking=True,
-            )
+            self._set_all_positions(self.joint_pos_ready_l, self.joint_pos_ready_r, self.config.goal_time_ready_sleep, True)
             logger.info(f"{self} going to sleep position.")
-            self.driver_r.set_all_positions(
-                trossen_arm.VectorDouble(self.joint_pos_sleep_r),
-                goal_time=self.config.goal_time_ready_sleep,
-                blocking=True,
-            )
-            self.driver_l.set_all_positions(
-                trossen_arm.VectorDouble(self.joint_pos_sleep_l),
-                goal_time=self.config.goal_time_ready_sleep,
-                blocking=True,
-            )
+            self._set_all_positions(self.joint_pos_sleep_l, self.joint_pos_sleep_r, self.config.goal_time_ready_sleep, True)
         if self.config.disable_torque_on_disconnect:
             logger.info(f"{self} disabling motor torques.")
             self.driver_l.set_all_modes(trossen_arm.Mode.idle)
