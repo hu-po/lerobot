@@ -3,6 +3,7 @@ import time
 from functools import cached_property
 from typing import Any
 
+import numpy as np
 from lerobot.common.cameras.utils import make_cameras_from_configs
 from lerobot.common.errors import DeviceAlreadyConnectedError, DeviceNotConnectedError
 
@@ -114,7 +115,10 @@ class Tatbot(Robot):
             self.driver_r = None
 
         for cam in self.cameras.values():
-            cam.connect()
+            try:
+                cam.connect()
+            except Exception as e:
+                logger.error(f"Failed to connect to {cam}: {e}")
 
         self.configure()
         logger.info(f"{self} connected.")
@@ -148,7 +152,11 @@ class Tatbot(Robot):
         # Capture images from cameras
         for cam_key, cam in self.cameras.items():
             start = time.perf_counter()
-            obs_dict[cam_key] = cam.async_read()
+            try:
+                obs_dict[cam_key] = cam.async_read()
+            except Exception as e:
+                logger.error(f"Failed to read {cam_key}: {e}")
+                obs_dict[cam_key] = np.zeros((cam.height, cam.width, 3), dtype=np.uint8)
             dt_ms = (time.perf_counter() - start) * 1e3
             logger.debug(f"{self} read {cam_key}: {dt_ms:.1f}ms")
 
@@ -181,5 +189,8 @@ class Tatbot(Robot):
             self.driver_l.set_all_modes(trossen_arm.Mode.idle)
             self.driver_r.set_all_modes(trossen_arm.Mode.idle)
         for cam in self.cameras.values():
-            cam.disconnect()
+            try:
+                cam.disconnect()
+            except Exception as e:
+                logger.error(f"Failed to disconnect from {cam}: {e}")
         logger.info(f"{self} disconnected.")
