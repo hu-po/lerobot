@@ -154,15 +154,18 @@ class Tatbot(Robot):
 
         return obs_dict
 
-    def send_action(self, action: dict[str, Any]) -> dict[str, Any]:
+    def send_action(self, action: dict[str, Any], goal_time: float = None, blocking: bool = False) -> dict[str, Any]:
         if not self.is_connected:
             raise DeviceNotConnectedError(f"{self} is not connected.")
-        
+    
+        if goal_time is None:
+            goal_time = self.config.goal_time_action
+
         goal_pos = {key.removesuffix(".pos"): val for key, val in action.items() if key.endswith(".pos")}
 
         joint_pos_l = [goal_pos[joint] for joint in self.joints[:7]]
         joint_pos_r = [goal_pos[joint] for joint in self.joints[7:]]
-        self._set_all_positions(joint_pos_l, joint_pos_r, self.config.goal_time_action, False)
+        self._set_all_positions(joint_pos_l, joint_pos_r, goal_time, blocking)
         return {f"{joint}.pos": val for joint, val in goal_pos.items()}
 
     def disconnect(self):
