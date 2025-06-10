@@ -106,7 +106,7 @@ class Tatbot(Robot):
             self.driver_l = trossen_arm.TrossenArmDriver()
             self.driver_l.configure(
                 trossen_arm.Model.wxai_v0,
-                trossen_arm.StandardEndEffector.wxai_v0_leader,
+                trossen_arm.StandardEndEffector.wxai_v0_base,
                 self.config.ip_address_l,
                 clear_error,
             )
@@ -177,12 +177,8 @@ class Tatbot(Robot):
     def send_action(self, action: dict[str, Any], goal_time: float = None, blocking: bool = False) -> dict[str, Any]:
         if not self.is_connected:
             raise DeviceNotConnectedError(f"{self} is not connected.")
-    
-        if goal_time is None:
-            goal_time = self.config.goal_time_action
-
+        goal_time = self.config.goal_time_action if goal_time is None else goal_time
         goal_pos = {key.removesuffix(".pos"): val for key, val in action.items() if key.endswith(".pos")}
-
         joint_pos_l = [goal_pos[joint] for joint in self.joints[:7]]
         joint_pos_r = [goal_pos[joint] for joint in self.joints[7:]]
         self._set_all_positions(joint_pos_l, joint_pos_r, goal_time, blocking)
