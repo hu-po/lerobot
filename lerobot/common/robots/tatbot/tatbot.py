@@ -182,8 +182,8 @@ class Tatbot(Robot):
         if self.config.sleep_on_disconnect:
             logger.info(f"{self} going to ready position.")
             self._set_all_positions(self.joint_pos_ready_l, self.joint_pos_ready_r, self.config.goal_time_ready_sleep, True)
-            logger.info(f"{self} going to sleep position.")
-            self._set_all_positions(self.joint_pos_sleep_l, self.joint_pos_sleep_r, self.config.goal_time_ready_sleep, True)
+            # logger.info(f"{self} going to sleep position.")
+            # self._set_all_positions(self.joint_pos_sleep_l, self.joint_pos_sleep_r, self.config.goal_time_ready_sleep, True)
         if self.config.disable_torque_on_disconnect:
             logger.info(f"{self} disabling motor torques.")
             self.driver_l.set_all_modes(trossen_arm.Mode.idle)
