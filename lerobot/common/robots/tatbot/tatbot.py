@@ -63,6 +63,18 @@ class Tatbot(Robot):
             goal_time=goal_time,
             blocking=blocking,
         )
+    
+    def _get_error_str(self) -> str:
+        error_str = ""
+        if self.driver_l is not None:
+            error_info_l = self.driver_l.get_error_information()
+            if error_info_l:
+                error_str += f"🦾🚨 Left arm error: {error_info_l}\n"
+        if self.driver_r is not None:
+            error_info_r = self.driver_r.get_error_information()
+            if error_info_r:
+                error_str += f"🦾🚨 Right arm error: {error_info_r}\n"
+        return error_str
 
     @property
     def _motors_ft(self) -> dict[str, type]:
@@ -86,7 +98,7 @@ class Tatbot(Robot):
     def is_connected(self) -> bool:
         return self.driver_l is not None and self.driver_r is not None and all(cam.is_connected for cam in self.cameras.values())
 
-    def connect(self, calibrate: bool = True) -> None:
+    def connect(self, calibrate: bool = True, clear_error: bool = True) -> None:
         if self.is_connected:
             raise DeviceAlreadyConnectedError(f"{self} already connected")
 
@@ -96,7 +108,7 @@ class Tatbot(Robot):
                 trossen_arm.Model.wxai_v0,
                 trossen_arm.StandardEndEffector.wxai_v0_leader,
                 self.config.ip_address_l,
-                False, # clear_error
+                clear_error,
             )
             self.driver_l.set_all_modes(trossen_arm.Mode.position)
             self.driver_r = trossen_arm.TrossenArmDriver()
@@ -104,7 +116,7 @@ class Tatbot(Robot):
                 trossen_arm.Model.wxai_v0,
                 trossen_arm.StandardEndEffector.wxai_v0_follower,
                 self.config.ip_address_r,
-                False, # clear_error
+                clear_error,
             )
             self.driver_r.set_all_modes(trossen_arm.Mode.position)
             if self.config.ready_on_connect:
