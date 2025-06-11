@@ -92,6 +92,9 @@ class Tatbot(Robot):
         logger.info(f"✅🦾 {self} right arm connected.")
 
     def _set_positions_l(self, joints: list[float], goal_time: float = 1.0, blocking: bool = True) -> None:
+        if self.arm_l is None:
+            logger.warning(f"🦾❌ Left arm is not connected.")
+            return
         try:
             logger.debug(f"🦾 Setting left arm positions: {joints}, goal_time: {goal_time}, blocking: {blocking}")
             self.arm_l.set_all_positions(
@@ -100,9 +103,12 @@ class Tatbot(Robot):
                 blocking=blocking,
             )
         except Exception as e:
-            logger.warning(f"🦾❌ Failed to set left arm positions: \n{type(e)}:\n{e}\n{self.get_error_str_l()}")
+            logger.warning(f"🦾❌ Failed to set left arm positions: \n{type(e)}:\n{e}\n{self._get_error_str_l()}")
 
     def _set_positions_r(self, joints: list[float], goal_time: float = 1.0, blocking: bool = True) -> None:
+        if self.arm_r is None:
+            logger.warning(f"🦾❌ Right arm is not connected.")
+            return
         try:
             logger.debug(f"🦾 Setting right arm positions: {joints}, goal_time: {goal_time}, blocking: {blocking}")
             self.driver_r.set_all_positions(
@@ -111,7 +117,7 @@ class Tatbot(Robot):
                 blocking=blocking,
             )
         except Exception as e:
-            logger.warning(f"🦾❌ Failed to set right arm positions: \n{type(e)}:\n{e}\n{self.get_error_str_r()}")
+            logger.warning(f"🦾❌ Failed to set right arm positions: \n{type(e)}:\n{e}\n{self._get_error_str_r()}")
 
     def _set_positions(self, joints_l: list[float], joints_r: list[float], goal_time: float = 1.0, block_mode: str = None) -> None:
         logger.debug(f"🤖 {self} setting positions: {joints_l}, {joints_r}, goal_time: {goal_time}, block_mode: {block_mode}")
