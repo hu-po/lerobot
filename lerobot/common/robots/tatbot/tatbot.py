@@ -147,12 +147,19 @@ class Tatbot(Robot):
 
     def get_observation(self) -> dict[str, Any]:
         if not self.is_connected:
-            raise DeviceNotConnectedError(f"{self} is not connected.")
+            logger.warning(f"{self} is not connected.")
+            # raise DeviceNotConnectedError(f"{self} is not connected.")
 
         # Read arm position
         start = time.perf_counter()
-        joint_pos_l = self.driver_l.get_all_positions()
-        joint_pos_r = self.driver_r.get_all_positions()
+        try:
+            joint_pos_l = self.driver_l.get_all_positions()
+            joint_pos_r = self.driver_r.get_all_positions()
+        except Exception as e:
+            logger.warning(f"Failed to read arm positions: {e}")
+            joint_pos_l = [0.0] * 7
+            joint_pos_r = [0.0] * 7
+
         obs_dict = {}
         for i, joint in enumerate(self.joints[:7]):
             obs_dict[f"{joint}.pos"] = joint_pos_l[i]
@@ -167,7 +174,7 @@ class Tatbot(Robot):
             try:
                 obs_dict[cam_key] = cam.async_read()
             except Exception as e:
-                logger.error(f"Failed to read {cam_key}: {e}")
+                logger.warning(f"Failed to read {cam_key}: {e}")
                 obs_dict[cam_key] = np.zeros((cam.height, cam.width, 3), dtype=np.uint8)
             dt_ms = (time.perf_counter() - start) * 1e3
             logger.debug(f"{self} read {cam_key}: {dt_ms:.1f}ms")
@@ -176,7 +183,9 @@ class Tatbot(Robot):
 
     def send_action(self, action: dict[str, Any], goal_time: float = None, blocking: bool = False) -> dict[str, Any]:
         if not self.is_connected:
-            raise DeviceNotConnectedError(f"{self} is not connected.")
+            logger.warning(f"{self} is not connected.")
+            # raise DeviceNotConnectedError(f"{self} is not connected.")
+
         goal_time = self.config.goal_time_action if goal_time is None else goal_time
         goal_pos = {key.removesuffix(".pos"): val for key, val in action.items() if key.endswith(".pos")}
         joint_pos_l = [goal_pos[joint] for joint in self.joints[:7]]
