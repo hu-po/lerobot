@@ -5,7 +5,7 @@ from typing import Any
 
 import numpy as np
 from lerobot.common.cameras.utils import make_cameras_from_configs
-from lerobot.common.errors import DeviceAlreadyConnectedError, DeviceNotConnectedError
+from lerobot.common.errors import DeviceAlreadyConnectedError #, DeviceNotConnectedError
 
 import trossen_arm
 
@@ -42,15 +42,19 @@ class Tatbot(Robot):
             "right.joint_5",
             "right.gripper",
         ]
-        # arms are folded up and rotated 
-        self.joint_pos_sleep_l = [0.0] * 7
-        self.joint_pos_sleep_r = [0.0] * 7
-        # arms are folded up and rotated inwards 0.2 radians
-        self.joint_pos_ready_l = [1.5708 - 0.3] + [0.0] * 6
-        self.joint_pos_ready_r = [1.5708 + 0.3] + [0.0] * 6
         self.arm_l = None
         self.arm_r = None
         self.cameras = make_cameras_from_configs(config.cameras)
+        if self.config.block_mode == "both":
+            logger.info(f"🤖 {self} block mode: {self.config.block_mode}")
+        elif self.config.block_mode == "left":
+            logger.info(f"🤖 {self} block mode: {self.config.block_mode}")
+        elif self.config.block_mode == "right":
+            logger.info(f"🤖 {self} block mode: {self.config.block_mode}")
+        elif self.config.block_mode == "none":
+            logger.info(f"🤖 {self} block mode: {self.config.block_mode}")
+        else:
+            raise ValueError(f"❌🤖 Invalid block mode: {self.config.block_mode}")
 
     def _connect_l(self, clear_error: bool = True) -> None:
         try:
@@ -61,9 +65,10 @@ class Tatbot(Robot):
                 trossen_arm.StandardEndEffector.wxai_v0_base,
                 self.config.ip_address_l,
                 clear_error,
+                timeout=self.config.connection_timeout,
             )
             self.arm_l.set_all_modes(trossen_arm.Mode.position)
-            self._set_positions_l(self.joint_pos_ready_l, self.config.goal_time_slow, True)
+            self._set_positions_l(self.config.home_pos_l, self.config.goal_time_slow, True)
         except Exception as e:
             logger.warning(f"🦾❌ Failed to connect to {self} left arm: {e}")
             self.arm_l = None
@@ -78,9 +83,10 @@ class Tatbot(Robot):
                 trossen_arm.StandardEndEffector.wxai_v0_follower,
                 self.config.ip_address_r,
                 clear_error,
+                timeout=self.config.connection_timeout,
             )
             self.driver_r.set_all_modes(trossen_arm.Mode.position)
-            self._set_positions_r(self.joint_pos_ready_r, self.config.goal_time_slow, True)
+            self._set_positions_r(self.config.home_pos_r, self.config.goal_time_slow, True)
         except Exception as e:
             logger.warning(f"🦾❌ Failed to connect to {self} right arm: {e}")
         logger.info(f"✅🦾 {self} right arm connected.")
@@ -106,6 +112,22 @@ class Tatbot(Robot):
             )
         except Exception as e:
             logger.warning(f"🦾❌ Failed to set right arm positions: \n{type(e)}:\n{e}\n{self.get_error_str_r()}")
+
+    def _set_positions(self, joints_l: list[float], joints_r: list[float], goal_time: float = 1.0, block_mode: str = None) -> None:
+        logger.debug(f"🤖 {self} setting positions: {joints_l}, {joints_r}, goal_time: {goal_time}, block_mode: {block_mode}")
+        block_mode = self.config.block_mode if block_mode is None else block_mode
+        if block_mode == "both":
+            self._set_positions_l(joints_l, goal_time, blocking=True)
+            self._set_positions_r(joints_r, goal_time, blocking=True)
+        elif block_mode == "left":
+            self._set_positions_r(joints_r, goal_time, blocking=False)
+            self._set_positions_l(joints_l, goal_time, blocking=True)
+        elif block_mode == "right":
+            self._set_positions_l(joints_l, goal_time, blocking=False)
+            self._set_positions_r(joints_r, goal_time, blocking=True)
+        elif block_mode == "none":
+            self._set_positions_l(joints_l, goal_time, blocking=False)
+            self._set_positions_r(joints_r, goal_time, blocking=False)
 
     def _get_error_str_l(self) -> str:
         try:
@@ -214,7 +236,7 @@ class Tatbot(Robot):
 
         return obs_dict
 
-    def send_action(self, action: dict[str, Any], goal_time: float = None, blocking: bool = True) -> dict[str, Any]:
+    def send_action(self, action: dict[str, Any], goal_time: float = None, block_mode: str = None) -> dict[str, Any]:
         if not self.is_connected:
             logger.warning(f"❌🤖 {self} is not connected.")
             # raise DeviceNotConnectedError(f"{self} is not connected.")
@@ -223,8 +245,7 @@ class Tatbot(Robot):
         goal_pos = {key.removesuffix(".pos"): val for key, val in action.items() if key.endswith(".pos")}
         joint_pos_l = [goal_pos[joint] for joint in self.joints[:7]]
         joint_pos_r = [goal_pos[joint] for joint in self.joints[7:]]
-        self._set_positions_l(joint_pos_l, goal_time, blocking)
-        self._set_positions_r(joint_pos_r, goal_time, blocking)
+        self._set_positions(joint_pos_l, joint_pos_r, goal_time, block_mode)
         return {f"{joint}.pos": val for joint, val in goal_pos.items()}
 
     def disconnect(self):
@@ -232,9 +253,8 @@ class Tatbot(Robot):
             logger.warning(f"❌🤖 {self} is not connected.")
             # raise DeviceNotConnectedError(f"{self} is not connected.")
 
-        logger.info(f"🤖 {self} going to ready position.")
-        self._set_positions_l(self.joint_pos_ready_l, self.config.goal_time_slow, True)
-        self._set_positions_r(self.joint_pos_ready_r, self.config.goal_time_slow, True)
+        logger.info(f"🤖 {self} going to home position.")
+        self._set_positions(self.config.home_pos_l, self.config.home_pos_r)
 
         try:
             self.arm_l.set_all_modes(trossen_arm.Mode.idle)
