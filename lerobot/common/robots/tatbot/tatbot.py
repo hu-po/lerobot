@@ -150,18 +150,24 @@ class Tatbot(Robot):
             return ""
         
     def _get_positions_l(self) -> list[float]:
+        if self.arm_l is None:
+            logger.warning(f"🦾❌ Left arm is not connected.")
+            return self.config.home_pos_l
         try:
             return self.arm_l.get_all_positions()
         except Exception as e:
             logger.warning(f"🦾❌ Failed to get left arm positions: {e}")
-            return [0.0] * 7
+            return self.config.home_pos_l
     
     def _get_positions_r(self) -> list[float]:
+        if self.arm_r is None:
+            logger.warning(f"🦾❌ Right arm is not connected.")
+            return self.config.home_pos_r
         try:
             return self.driver_r.get_all_positions()
         except Exception as e:
             logger.warning(f"🦾❌ Failed to get right arm positions: {e}")
-            return [0.0] * 7
+            return self.config.home_pos_r
 
     @property
     def _motors_ft(self) -> dict[str, type]:
