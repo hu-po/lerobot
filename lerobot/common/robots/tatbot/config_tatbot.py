@@ -5,9 +5,6 @@ from lerobot.common.cameras.realsense import RealSenseCameraConfig
 
 from ..config import RobotConfig
 
-class BlockMode(Enum):
-    OFF = 0
-    ON = 1
 
 @RobotConfig.register_subclass("tatbot")
 @dataclass
