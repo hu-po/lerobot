@@ -232,24 +232,26 @@ class Tatbot(Robot):
             logger.warning(f"❌🤖 {self} is not connected.")
             # raise DeviceNotConnectedError(f"{self} is not connected.")
 
-        logger.info(f"{self} going to ready position.")
+        logger.info(f"🤖 {self} going to ready position.")
         self._set_positions_l(self.joint_pos_ready_l, self.config.goal_time_slow, True)
         self._set_positions_r(self.joint_pos_ready_r, self.config.goal_time_slow, True)
 
-        logger.info(f"{self} disabling motor torques.")
         try:
             self.arm_l.set_all_modes(trossen_arm.Mode.idle)
+            logger.info(f"✅🦾 left arm idle.")
         except Exception as e:
-            logger.warning(f"🦾❌ Failed to set left arm modes: {e}")
+            logger.warning(f"🦾❌ Failed to idle left arm: {e}")
+
         try:
-            self.driver_r.set_all_modes(trossen_arm.Mode.idle)
+            self.arm_r.set_all_modes(trossen_arm.Mode.idle)
+            logger.info(f"✅🦾 right arm idle.")
         except Exception as e:
-            logger.warning(f"🦾❌ Failed to set right arm modes: {e}")
+            logger.warning(f"🦾❌ Failed to idle right arm: {e}")
 
         for cam in self.cameras.values():
             try:
                 cam.disconnect()
             except Exception as e:
-                logger.warning(f"Failed to disconnect from {cam}: {e}")
+                logger.warning(f"🎥❌ Failed to disconnect from {cam}: {e}")
 
         logger.info(f"✅🤖 {self} disconnected.")
