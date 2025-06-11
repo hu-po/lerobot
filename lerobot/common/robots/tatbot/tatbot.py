@@ -136,6 +136,9 @@ class Tatbot(Robot):
             self._set_positions_r(joints_r, goal_time, blocking=False)
 
     def _get_error_str_l(self) -> str:
+        if self.arm_l is None:
+            logger.warning(f"🦾❌ Left arm is not connected.")
+            return ""
         try:
             return self.arm_l.get_error_information()
         except Exception as e:
@@ -143,6 +146,9 @@ class Tatbot(Robot):
             return ""
         
     def _get_error_str_r(self) -> str:
+        if self.arm_r is None:
+            logger.warning(f"🦾❌ Right arm is not connected.")
+            return ""
         try:
             return self.driver_r.get_error_information()
         except Exception as e:
@@ -268,17 +274,19 @@ class Tatbot(Robot):
         logger.info(f"🤖 {self} going to home position.")
         self._set_positions(self.config.home_pos_l, self.config.home_pos_r)
 
-        try:
-            self.arm_l.set_all_modes(trossen_arm.Mode.idle)
-            logger.info(f"✅🦾 left arm idle.")
-        except Exception as e:
-            logger.warning(f"🦾❌ Failed to idle left arm: {e}")
+        if self.arm_l is not None:
+            try:
+                self.arm_l.set_all_modes(trossen_arm.Mode.idle)
+                logger.info(f"✅🦾 left arm idle.")
+            except Exception as e:
+                logger.warning(f"🦾❌ Failed to idle left arm: {e}")
 
-        try:
-            self.arm_r.set_all_modes(trossen_arm.Mode.idle)
-            logger.info(f"✅🦾 right arm idle.")
-        except Exception as e:
-            logger.warning(f"🦾❌ Failed to idle right arm: {e}")
+        if self.arm_r is not None:
+            try:
+                self.arm_r.set_all_modes(trossen_arm.Mode.idle)
+                logger.info(f"✅🦾 right arm idle.")
+            except Exception as e:
+                logger.warning(f"🦾❌ Failed to idle right arm: {e}")
 
         for cam in self.cameras.values():
             try:
