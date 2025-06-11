@@ -9,16 +9,10 @@ from ..config import RobotConfig
 @RobotConfig.register_subclass("tatbot")
 @dataclass
 class TatbotConfig(RobotConfig):
-    ready_on_connect: bool = True
-    """Go to ready position on robot connect."""
-    sleep_on_disconnect: bool = True
-    """Go to sleep position on robot disconnect."""
-    disable_torque_on_disconnect: bool = True
-    """Disable motor torques on robot disconnect."""
-    goal_time_action: float = 0.5
-    """Robot travel time when executing actions."""
-    goal_time_ready_sleep: float = 2.0
-    """Robot travel time when moving to sleep or ready positions."""
+    goal_time_fast: float = 0.5
+    """Robot travel time when executing fast actions, usually small movements."""
+    goal_time_slow: float = 3.0
+    """Robot travel time when moving slowly, usually larger movements."""
 
     ip_address_l: str = "192.168.1.3"
     """IP address of the left robot arm."""

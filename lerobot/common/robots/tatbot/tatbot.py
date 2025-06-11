@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 class Tatbot(Robot):
     """
-    [Tatbot](https://github.com/hu-po/tatbot)
+    A [tatbot](https://github.com/hu-po/tatbot) robot.
     """
 
     config_class = TatbotConfig
@@ -48,33 +48,92 @@ class Tatbot(Robot):
         # arms are folded up and rotated inwards 0.2 radians
         self.joint_pos_ready_l = [1.5708 - 0.3] + [0.0] * 6
         self.joint_pos_ready_r = [1.5708 + 0.3] + [0.0] * 6
-        self.driver_l = None
-        self.driver_r = None
+        self.arm_l = None
+        self.arm_r = None
         self.cameras = make_cameras_from_configs(config.cameras)
 
-    def _set_all_positions(self, joint_pos_l: list[float], joint_pos_r: list[float], goal_time: float = 0.1, blocking: bool = True) -> None:
-        self.driver_l.set_all_positions(
-            trossen_arm.VectorDouble(joint_pos_l),
-            goal_time=goal_time,
-            blocking=blocking,
-        )
-        self.driver_r.set_all_positions(
-            trossen_arm.VectorDouble(joint_pos_r),
-            goal_time=goal_time,
-            blocking=blocking,
-        )
+    def _connect_l(self, clear_error: bool = True) -> None:
+        try:
+            logger.debug(f"🦾 Connecting to {self} left arm")
+            self.arm_l = trossen_arm.TrossenArmDriver()
+            self.arm_l.configure(
+                trossen_arm.Model.wxai_v0,
+                trossen_arm.StandardEndEffector.wxai_v0_base,
+                self.config.ip_address_l,
+                clear_error,
+            )
+            self.arm_l.set_all_modes(trossen_arm.Mode.position)
+            self._set_positions_l(self.joint_pos_ready_l, self.config.goal_time_slow, True)
+        except Exception as e:
+            logger.warning(f"🦾❌ Failed to connect to {self} left arm: {e}")
+            self.arm_l = None
+        logger.info(f"✅🦾 {self} left arm connected.")
+
+    def _connect_r(self, clear_error: bool = True) -> None:
+        try:
+            logger.debug(f"🦾 Connecting to {self} right arm")
+            self.driver_r = trossen_arm.TrossenArmDriver()
+            self.driver_r.configure(
+                trossen_arm.Model.wxai_v0,
+                trossen_arm.StandardEndEffector.wxai_v0_follower,
+                self.config.ip_address_r,
+                clear_error,
+            )
+            self.driver_r.set_all_modes(trossen_arm.Mode.position)
+            self._set_positions_r(self.joint_pos_ready_r, self.config.goal_time_slow, True)
+        except Exception as e:
+            logger.warning(f"🦾❌ Failed to connect to {self} right arm: {e}")
+        logger.info(f"✅🦾 {self} right arm connected.")
+
+    def _set_positions_l(self, joints: list[float], goal_time: float = 1.0, blocking: bool = True) -> None:
+        try:
+            logger.debug(f"🦾 Setting left arm positions: {joints}, goal_time: {goal_time}, blocking: {blocking}")
+            self.arm_l.set_all_positions(
+                trossen_arm.VectorDouble(joints),
+                goal_time=goal_time,
+                blocking=blocking,
+            )
+        except Exception as e:
+            logger.warning(f"🦾❌ Failed to set left arm positions: \n{type(e)}:\n{e}\n{self.get_error_str_l()}")
+
+    def _set_positions_r(self, joints: list[float], goal_time: float = 1.0, blocking: bool = True) -> None:
+        try:
+            logger.debug(f"🦾 Setting right arm positions: {joints}, goal_time: {goal_time}, blocking: {blocking}")
+            self.driver_r.set_all_positions(
+                trossen_arm.VectorDouble(joints),
+                goal_time=goal_time,
+                blocking=blocking,
+            )
+        except Exception as e:
+            logger.warning(f"🦾❌ Failed to set right arm positions: \n{type(e)}:\n{e}\n{self.get_error_str_r()}")
+
+    def _get_error_str_l(self) -> str:
+        try:
+            return self.arm_l.get_error_information()
+        except Exception as e:
+            logger.warning(f"🦾❌ Failed to get left arm error: {e}")
+            return ""
+        
+    def _get_error_str_r(self) -> str:
+        try:
+            return self.driver_r.get_error_information()
+        except Exception as e:
+            logger.warning(f"🦾❌ Failed to get right arm error: {e}")
+            return ""
+        
+    def _get_positions_l(self) -> list[float]:
+        try:
+            return self.arm_l.get_all_positions()
+        except Exception as e:
+            logger.warning(f"🦾❌ Failed to get left arm positions: {e}")
+            return [0.0] * 7
     
-    def _get_error_str(self) -> str:
-        error_str = ""
-        if self.driver_l is not None:
-            error_info_l = self.driver_l.get_error_information()
-            if error_info_l:
-                error_str += f"🦾🚨 Left arm error: {error_info_l}\n"
-        if self.driver_r is not None:
-            error_info_r = self.driver_r.get_error_information()
-            if error_info_r:
-                error_str += f"🦾🚨 Right arm error: {error_info_r}\n"
-        return error_str
+    def _get_positions_r(self) -> list[float]:
+        try:
+            return self.driver_r.get_all_positions()
+        except Exception as e:
+            logger.warning(f"🦾❌ Failed to get right arm positions: {e}")
+            return [0.0] * 7
 
     @property
     def _motors_ft(self) -> dict[str, type]:
@@ -96,44 +155,24 @@ class Tatbot(Robot):
 
     @property
     def is_connected(self) -> bool:
-        return self.driver_l is not None and self.driver_r is not None and all(cam.is_connected for cam in self.cameras.values())
+        return self.arm_l is not None and self.driver_r is not None and all(cam.is_connected for cam in self.cameras.values())
 
-    def connect(self, calibrate: bool = True, clear_error: bool = True) -> None:
+    def connect(self, calibrate: bool = True) -> None:
         if self.is_connected:
-            raise DeviceAlreadyConnectedError(f"{self} already connected")
+            raise DeviceAlreadyConnectedError(f"❌🤖 {self} already connected")
 
-        try:
-            self.driver_l = trossen_arm.TrossenArmDriver()
-            self.driver_l.configure(
-                trossen_arm.Model.wxai_v0,
-                trossen_arm.StandardEndEffector.wxai_v0_base,
-                self.config.ip_address_l,
-                clear_error,
-            )
-            self.driver_l.set_all_modes(trossen_arm.Mode.position)
-            self.driver_r = trossen_arm.TrossenArmDriver()
-            self.driver_r.configure(
-                trossen_arm.Model.wxai_v0,
-                trossen_arm.StandardEndEffector.wxai_v0_follower,
-                self.config.ip_address_r,
-                clear_error,
-            )
-            self.driver_r.set_all_modes(trossen_arm.Mode.position)
-            if self.config.ready_on_connect:
-                self._set_all_positions(self.joint_pos_ready_l, self.joint_pos_ready_r, self.config.goal_time_ready_sleep, True)
-        except Exception as e:
-            logger.error(f"Failed to connect to {self}: {e}")
-            self.driver_l = None
-            self.driver_r = None
+        # connect to each arm
+        self._connect_l()
+        self._connect_r()
 
         for cam in self.cameras.values():
             try:
                 cam.connect()
             except Exception as e:
-                logger.error(f"Failed to connect to {cam}: {e}")
+                logger.warning(f"🎥❌Failed to connect to {cam}: {e}")
 
         self.configure()
-        logger.info(f"{self} connected.")
+        logger.info(f"✅🤖 {self} connected.")
 
     @property
     def is_calibrated(self) -> bool:
@@ -147,19 +186,13 @@ class Tatbot(Robot):
 
     def get_observation(self) -> dict[str, Any]:
         if not self.is_connected:
-            logger.warning(f"{self} is not connected.")
+            logger.warning(f"❌🤖 {self} is not connected.")
             # raise DeviceNotConnectedError(f"{self} is not connected.")
 
         # Read arm position
         start = time.perf_counter()
-        try:
-            joint_pos_l = self.driver_l.get_all_positions()
-            joint_pos_r = self.driver_r.get_all_positions()
-        except Exception as e:
-            logger.warning(f"Failed to read arm positions: {e}")
-            joint_pos_l = [0.0] * 7
-            joint_pos_r = [0.0] * 7
-
+        joint_pos_l = self._get_positions_l()
+        joint_pos_r = self._get_positions_r()
         obs_dict = {}
         for i, joint in enumerate(self.joints[:7]):
             obs_dict[f"{joint}.pos"] = joint_pos_l[i]
@@ -174,40 +207,49 @@ class Tatbot(Robot):
             try:
                 obs_dict[cam_key] = cam.async_read()
             except Exception as e:
-                logger.warning(f"Failed to read {cam_key}: {e}")
+                logger.warning(f"❌🎥 Failed to read {cam_key}: {e}")
                 obs_dict[cam_key] = np.zeros((cam.height, cam.width, 3), dtype=np.uint8)
             dt_ms = (time.perf_counter() - start) * 1e3
             logger.debug(f"{self} read {cam_key}: {dt_ms:.1f}ms")
 
         return obs_dict
 
-    def send_action(self, action: dict[str, Any], goal_time: float = None, blocking: bool = False) -> dict[str, Any]:
+    def send_action(self, action: dict[str, Any], goal_time: float = None, blocking: bool = True) -> dict[str, Any]:
         if not self.is_connected:
-            logger.warning(f"{self} is not connected.")
+            logger.warning(f"❌🤖 {self} is not connected.")
             # raise DeviceNotConnectedError(f"{self} is not connected.")
 
-        goal_time = self.config.goal_time_action if goal_time is None else goal_time
+        goal_time = self.config.goal_time_fast if goal_time is None else goal_time
         goal_pos = {key.removesuffix(".pos"): val for key, val in action.items() if key.endswith(".pos")}
         joint_pos_l = [goal_pos[joint] for joint in self.joints[:7]]
         joint_pos_r = [goal_pos[joint] for joint in self.joints[7:]]
-        self._set_all_positions(joint_pos_l, joint_pos_r, goal_time, blocking)
+        self._set_positions_l(joint_pos_l, goal_time, blocking)
+        self._set_positions_r(joint_pos_r, goal_time, blocking)
         return {f"{joint}.pos": val for joint, val in goal_pos.items()}
 
     def disconnect(self):
         if not self.is_connected:
-            raise DeviceNotConnectedError(f"{self} is not connected.")
-        if self.config.sleep_on_disconnect:
-            logger.info(f"{self} going to ready position.")
-            self._set_all_positions(self.joint_pos_ready_l, self.joint_pos_ready_r, self.config.goal_time_ready_sleep, True)
-            # logger.info(f"{self} going to sleep position.")
-            # self._set_all_positions(self.joint_pos_sleep_l, self.joint_pos_sleep_r, self.config.goal_time_ready_sleep, True)
-        if self.config.disable_torque_on_disconnect:
-            logger.info(f"{self} disabling motor torques.")
-            self.driver_l.set_all_modes(trossen_arm.Mode.idle)
+            logger.warning(f"❌🤖 {self} is not connected.")
+            # raise DeviceNotConnectedError(f"{self} is not connected.")
+
+        logger.info(f"{self} going to ready position.")
+        self._set_positions_l(self.joint_pos_ready_l, self.config.goal_time_slow, True)
+        self._set_positions_r(self.joint_pos_ready_r, self.config.goal_time_slow, True)
+
+        logger.info(f"{self} disabling motor torques.")
+        try:
+            self.arm_l.set_all_modes(trossen_arm.Mode.idle)
+        except Exception as e:
+            logger.warning(f"🦾❌ Failed to set left arm modes: {e}")
+        try:
             self.driver_r.set_all_modes(trossen_arm.Mode.idle)
+        except Exception as e:
+            logger.warning(f"🦾❌ Failed to set right arm modes: {e}")
+
         for cam in self.cameras.values():
             try:
                 cam.disconnect()
             except Exception as e:
-                logger.error(f"Failed to disconnect from {cam}: {e}")
-        logger.info(f"{self} disconnected.")
+                logger.warning(f"Failed to disconnect from {cam}: {e}")
+
+        logger.info(f"✅🤖 {self} disconnected.")
