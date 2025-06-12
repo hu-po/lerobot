@@ -91,11 +91,32 @@ class Tatbot(Robot):
             logger.warning(f"🦾❌ Failed to connect to {self} right arm: {e}")
         logger.info(f"✅🦾 {self} right arm connected.")
 
-    def _set_positions_l(self, joints: list[float], goal_time: float = 1.0, blocking: bool = True) -> None:
+    def _get_positions_l(self) -> list[float]:
+        if self.arm_l is None:
+            logger.warning(f"🦾❌ Left arm is not connected.")
+            return self.config.home_pos_l
+        try:
+            return self.arm_l.get_all_positions()
+        except Exception as e:
+            logger.warning(f"🦾❌ Failed to get left arm positions: {e}")
+            return self.config.home_pos_l
+    
+    def _get_positions_r(self) -> list[float]:
+        if self.arm_r is None:
+            logger.warning(f"🦾❌ Right arm is not connected.")
+            return self.config.home_pos_r
+        try:
+            return self.driver_r.get_all_positions()
+        except Exception as e:
+            logger.warning(f"🦾❌ Failed to get right arm positions: {e}")
+            return self.config.home_pos_r
+
+    def _set_positions_l(self, joints: list[float] = None, goal_time: float = 1.0, blocking: bool = True) -> None:
         if self.arm_l is None:
             logger.warning(f"🦾❌ Left arm is not connected.")
             return
         try:
+            joints = joints or self._get_positions_l()
             logger.debug(f"🦾 Setting left arm positions: {joints}, goal_time: {goal_time}, blocking: {blocking}")
             self.arm_l.set_all_positions(
                 trossen_arm.VectorDouble(joints),
@@ -105,11 +126,12 @@ class Tatbot(Robot):
         except Exception as e:
             logger.warning(f"🦾❌ Failed to set left arm positions: \n{type(e)}:\n{e}\n{self._get_error_str_l()}")
 
-    def _set_positions_r(self, joints: list[float], goal_time: float = 1.0, blocking: bool = True) -> None:
+    def _set_positions_r(self, joints: list[float] = None, goal_time: float = 1.0, blocking: bool = True) -> None:
         if self.arm_r is None:
             logger.warning(f"🦾❌ Right arm is not connected.")
             return
         try:
+            joints = joints or self._get_positions_r()
             logger.debug(f"🦾 Setting right arm positions: {joints}, goal_time: {goal_time}, blocking: {blocking}")
             self.driver_r.set_all_positions(
                 trossen_arm.VectorDouble(joints),
@@ -154,26 +176,6 @@ class Tatbot(Robot):
         except Exception as e:
             logger.warning(f"🦾❌ Failed to get right arm error: {e}")
             return ""
-        
-    def _get_positions_l(self) -> list[float]:
-        if self.arm_l is None:
-            logger.warning(f"🦾❌ Left arm is not connected.")
-            return self.config.home_pos_l
-        try:
-            return self.arm_l.get_all_positions()
-        except Exception as e:
-            logger.warning(f"🦾❌ Failed to get left arm positions: {e}")
-            return self.config.home_pos_l
-    
-    def _get_positions_r(self) -> list[float]:
-        if self.arm_r is None:
-            logger.warning(f"🦾❌ Right arm is not connected.")
-            return self.config.home_pos_r
-        try:
-            return self.driver_r.get_all_positions()
-        except Exception as e:
-            logger.warning(f"🦾❌ Failed to get right arm positions: {e}")
-            return self.config.home_pos_r
 
     @property
     def _motors_ft(self) -> dict[str, type]:
