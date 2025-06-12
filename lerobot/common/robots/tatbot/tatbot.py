@@ -116,7 +116,8 @@ class Tatbot(Robot):
             logger.warning(f"🦾❌ Left arm is not connected.")
             return
         try:
-            joints = joints or self._get_positions_l()
+            if joints is None:
+                joints = self._get_positions_l()
             logger.debug(f"🦾 Setting left arm positions: {joints}, goal_time: {goal_time}, blocking: {blocking}")
             self.arm_l.set_all_positions(
                 trossen_arm.VectorDouble(joints),
@@ -131,7 +132,8 @@ class Tatbot(Robot):
             logger.warning(f"🦾❌ Right arm is not connected.")
             return
         try:
-            joints = joints or self._get_positions_r()
+            if joints is None:
+                joints = self._get_positions_r()
             logger.debug(f"🦾 Setting right arm positions: {joints}, goal_time: {goal_time}, blocking: {blocking}")
             self.driver_r.set_all_positions(
                 trossen_arm.VectorDouble(joints),
