@@ -77,15 +77,15 @@ class Tatbot(Robot):
     def _connect_r(self, clear_error: bool = True) -> None:
         try:
             logger.debug(f"🦾 Connecting to {self} right arm")
-            self.driver_r = trossen_arm.TrossenArmDriver()
-            self.driver_r.configure(
+            self.arm_r = trossen_arm.TrossenArmDriver()
+            self.arm_r.configure(
                 trossen_arm.Model.wxai_v0,
                 trossen_arm.StandardEndEffector.wxai_v0_follower,
                 self.config.ip_address_r,
                 clear_error,
                 timeout=self.config.connection_timeout,
             )
-            self.driver_r.set_all_modes(trossen_arm.Mode.position)
+            self.arm_r.set_all_modes(trossen_arm.Mode.position)
             self._set_positions_r(self.config.home_pos_r, self.config.goal_time_slow, True)
         except Exception as e:
             logger.warning(f"🦾❌ Failed to connect to {self} right arm: {e}")
@@ -106,7 +106,7 @@ class Tatbot(Robot):
             logger.warning(f"🦾❌ Right arm is not connected.")
             return self.config.home_pos_r
         try:
-            return self.driver_r.get_all_positions()
+            return self.arm_r.get_all_positions()
         except Exception as e:
             logger.warning(f"🦾❌ Failed to get right arm positions: {e}")
             return self.config.home_pos_r
@@ -135,7 +135,7 @@ class Tatbot(Robot):
             if joints is None:
                 joints = self._get_positions_r()
             logger.debug(f"🦾 Setting right arm positions: {joints}, goal_time: {goal_time}, blocking: {blocking}")
-            self.driver_r.set_all_positions(
+            self.arm_r.set_all_positions(
                 trossen_arm.VectorDouble(joints),
                 goal_time=goal_time,
                 blocking=blocking,
@@ -174,7 +174,7 @@ class Tatbot(Robot):
             logger.warning(f"🦾❌ Right arm is not connected.")
             return ""
         try:
-            return self.driver_r.get_error_information()
+            return self.arm_r.get_error_information()
         except Exception as e:
             logger.warning(f"🦾❌ Failed to get right arm error: {e}")
             return ""
@@ -199,7 +199,7 @@ class Tatbot(Robot):
 
     @property
     def is_connected(self) -> bool:
-        return self.arm_l is not None and self.driver_r is not None and all(cam.is_connected for cam in self.cameras.values())
+        return self.arm_l is not None and self.arm_r is not None and all(cam.is_connected for cam in self.cameras.values())
 
     def connect(self, calibrate: bool = True) -> None:
         if self.is_connected:
