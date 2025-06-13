@@ -70,7 +70,7 @@ class Tatbot(Robot):
             self.arm_l.set_all_modes(trossen_arm.Mode.position)
             self._set_positions_l(self.config.home_pos_l, self.config.goal_time_slow, True)
         except Exception as e:
-            logger.warning(f"🦾❌ Failed to connect to {self} left arm: {e}")
+            logger.warning(f"🦾❌ Failed to connect to {self} left arm:\n{e}")
             self.arm_l = None
         logger.info(f"✅🦾 {self} left arm connected.")
 
@@ -88,7 +88,7 @@ class Tatbot(Robot):
             self.arm_r.set_all_modes(trossen_arm.Mode.position)
             self._set_positions_r(self.config.home_pos_r, self.config.goal_time_slow, True)
         except Exception as e:
-            logger.warning(f"🦾❌ Failed to connect to {self} right arm: {e}")
+            logger.warning(f"🦾❌ Failed to connect to {self} right arm:\n{e}")
         logger.info(f"✅🦾 {self} right arm connected.")
 
     def _get_positions_l(self) -> list[float]:
@@ -98,7 +98,7 @@ class Tatbot(Robot):
         try:
             return self.arm_l.get_all_positions()
         except Exception as e:
-            logger.warning(f"🦾❌ Failed to get left arm positions: {e}")
+            logger.warning(f"🦾❌ Failed to get left arm positions:\n{e}")
             return self.config.home_pos_l
     
     def _get_positions_r(self) -> list[float]:
@@ -108,16 +108,14 @@ class Tatbot(Robot):
         try:
             return self.arm_r.get_all_positions()
         except Exception as e:
-            logger.warning(f"🦾❌ Failed to get right arm positions: {e}")
+            logger.warning(f"🦾❌ Failed to get right arm positions:\n{e}")
             return self.config.home_pos_r
 
-    def _set_positions_l(self, joints: list[float] = None, goal_time: float = 1.0, blocking: bool = True) -> None:
+    def _set_positions_l(self, joints: list[float], goal_time: float = 1.0, blocking: bool = True) -> None:
         if self.arm_l is None:
             logger.warning(f"🦾❌ Left arm is not connected.")
             return
         try:
-            if joints is None:
-                joints = self._get_positions_l()
             logger.debug(f"🦾 Setting left arm positions: {joints}, goal_time: {goal_time}, blocking: {blocking}")
             self.arm_l.set_all_positions(
                 trossen_arm.VectorDouble(joints),
@@ -127,13 +125,11 @@ class Tatbot(Robot):
         except Exception as e:
             logger.warning(f"🦾❌ Failed to set left arm positions: \n{type(e)}:\n{e}\n{self._get_error_str_l()}")
 
-    def _set_positions_r(self, joints: list[float] = None, goal_time: float = 1.0, blocking: bool = True) -> None:
+    def _set_positions_r(self, joints: list[float], goal_time: float = 1.0, blocking: bool = True) -> None:
         if self.arm_r is None:
             logger.warning(f"🦾❌ Right arm is not connected.")
             return
         try:
-            if joints is None:
-                joints = self._get_positions_r()
             logger.debug(f"🦾 Setting right arm positions: {joints}, goal_time: {goal_time}, blocking: {blocking}")
             self.arm_r.set_all_positions(
                 trossen_arm.VectorDouble(joints),
@@ -166,7 +162,7 @@ class Tatbot(Robot):
         try:
             return self.arm_l.get_error_information()
         except Exception as e:
-            logger.warning(f"🦾❌ Failed to get left arm error: {e}")
+            logger.warning(f"🦾❌ Failed to get left arm error:\n{e}")
             return ""
         
     def _get_error_str_r(self) -> str:
@@ -176,7 +172,7 @@ class Tatbot(Robot):
         try:
             return self.arm_r.get_error_information()
         except Exception as e:
-            logger.warning(f"🦾❌ Failed to get right arm error: {e}")
+            logger.warning(f"🦾❌ Failed to get right arm error:\n{e}")
             return ""
 
     @property
@@ -213,7 +209,7 @@ class Tatbot(Robot):
             try:
                 cam.connect()
             except Exception as e:
-                logger.warning(f"🎥❌Failed to connect to {cam}: {e}")
+                logger.warning(f"🎥❌Failed to connect to {cam}:\n{e}")
 
         self.configure()
         logger.info(f"✅🤖 {self} connected.")
@@ -251,7 +247,7 @@ class Tatbot(Robot):
             try:
                 obs_dict[cam_key] = cam.async_read()
             except Exception as e:
-                logger.warning(f"❌🎥 Failed to read {cam_key}: {e}")
+                logger.warning(f"❌🎥 Failed to read {cam_key}:\n{e}")
                 obs_dict[cam_key] = np.zeros((cam.height, cam.width, 3), dtype=np.uint8)
             dt_ms = (time.perf_counter() - start) * 1e3
             logger.debug(f"{self} read {cam_key}: {dt_ms:.1f}ms")
@@ -283,19 +279,19 @@ class Tatbot(Robot):
                 self.arm_l.set_all_modes(trossen_arm.Mode.idle)
                 logger.info(f"✅🦾 left arm idle.")
             except Exception as e:
-                logger.warning(f"🦾❌ Failed to idle left arm: {e}")
+                logger.warning(f"🦾❌ Failed to idle left arm:\n{e}")
 
         if self.arm_r is not None:
             try:
                 self.arm_r.set_all_modes(trossen_arm.Mode.idle)
                 logger.info(f"✅🦾 right arm idle.")
             except Exception as e:
-                logger.warning(f"🦾❌ Failed to idle right arm: {e}")
+                logger.warning(f"🦾❌ Failed to idle right arm:\n{e}")
 
         for cam in self.cameras.values():
             try:
                 cam.disconnect()
             except Exception as e:
-                logger.warning(f"🎥❌ Failed to disconnect from {cam}: {e}")
+                logger.warning(f"🎥❌ Failed to disconnect from {cam}:\n{e}")
 
         logger.info(f"✅🤖 {self} disconnected.")

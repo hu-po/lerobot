@@ -18,7 +18,7 @@ class TatbotConfig(RobotConfig):
 
     home_pos_l: list[float] = field(default_factory=lambda: [1.5708 - 0.3] + [0.0] * 6)
     """Radian joint positions of the left arm: folded up, resting on itself, rotated slightly inwards."""
-    home_pos_r: list[float] = field(default_factory=lambda: [1.5708 + 0.3] + [0.0] * 6)
+    home_pos_r: list[float] = field(default_factory=lambda: [0.3] + [0.0] * 6)
     """Radian joint positions of the right arm: folded up, resting on itself, rotated slightly inwards."""
 
     block_mode: str = "both"
@@ -41,13 +41,13 @@ class TatbotConfig(RobotConfig):
                 fps=30,
                 width=640,
                 height=480,
-                serial_number_or_name="218622278376", # realsense_b
+                serial_number_or_name="218622278376",
             ),
             "wrist": RealSenseCameraConfig(
                 fps=30,
                 width=640,
                 height=480,
-                serial_number_or_name="230422273017", # realsense_a
+                serial_number_or_name="230422273017",
             ),
         }
     )
