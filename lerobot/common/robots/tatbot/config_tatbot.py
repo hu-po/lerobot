@@ -15,8 +15,10 @@ class TatbotConfig(RobotConfig):
     """Robot travel time when moving slowly, usually larger movements."""
     connection_timeout: float = 5.0
     """Timeout when connecting to the robot arms in seconds."""
-    joint_tolerance: float = 1e-3
-    """Tolerance for joint position mismatch."""
+    joint_tolerance_warning: float = 1e-3
+    """Warning tolerance for joint position mismatch."""
+    joint_tolerance_error: float = 0.1
+    """Error tolerance for joint position error."""
 
     home_pos_l: list[float] = field(default_factory=lambda: [1.5708 - 0.3] + [0.0] * 6)
     """Radian joint positions of the left arm: folded up, resting on itself, rotated slightly inwards."""
