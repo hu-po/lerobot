@@ -101,7 +101,7 @@ class Tatbot(Robot):
             logger.warning(f"🦾❌ Failed to get right arm positions:\n{e}")
             return self.config.home_pos_r
 
-    def _set_positions_l(self, joints: list[float], goal_time: float = 1.0) -> None:
+    def _set_positions_l(self, joints: list[float], goal_time: float = 1.0, block: bool = True) -> None:
         if self.arm_l is None:
             logger.warning(f"🦾❌ Left arm is not connected.")
             return
@@ -110,7 +110,7 @@ class Tatbot(Robot):
             self.arm_l.set_all_positions(
                 trossen_arm.VectorDouble(joints),
                 goal_time=goal_time,
-                blocking=True,
+                blocking=block,
             )
             read_joints = self._get_positions_l()
             mismatch: bool = False
@@ -126,7 +126,7 @@ class Tatbot(Robot):
         except Exception as e:
             logger.warning(f"🦾❌ Failed to set left arm positions: \n{type(e)}:\n{e}\n{self._get_error_str_l()}")
 
-    def _set_positions_r(self, joints: list[float], goal_time: float = 1.0) -> None:
+    def _set_positions_r(self, joints: list[float], goal_time: float = 1.0, block: bool = True) -> None:
         if self.arm_r is None:
             logger.warning(f"🦾❌ Right arm is not connected.")
             return
@@ -135,7 +135,7 @@ class Tatbot(Robot):
             self.arm_r.set_all_positions(
                 trossen_arm.VectorDouble(joints),
                 goal_time=goal_time,
-                blocking=True,
+                blocking=block,
             )
             read_joints = self._get_positions_r()
             mismatch: bool = False
@@ -248,17 +248,19 @@ class Tatbot(Robot):
 
         return obs_dict
 
-    def send_action(self, action: dict[str, Any], goal_time: float = None) -> dict[str, Any]:
+    def send_action(self, action: dict[str, Any], goal_time: float = None, block: str = "both") -> dict[str, Any]:
         if not self.is_connected:
             logger.warning(f"❌🤖 {self} is not connected.")
             # raise DeviceNotConnectedError(f"{self} is not connected.")
 
         goal_time = self.config.goal_time_fast if goal_time is None else goal_time
         goal_pos = {key.removesuffix(".pos"): val for key, val in action.items() if key.endswith(".pos")}
-        joint_pos_l = [goal_pos[joint] for joint in self.joints[:7]]
-        self._set_positions_l(joint_pos_l, goal_time)
         joint_pos_r = [goal_pos[joint] for joint in self.joints[7:]]
-        self._set_positions_r(joint_pos_r, goal_time)
+        _block_right: bool = block == "right" or block == "both"
+        self._set_positions_r(joint_pos_r, goal_time, block=_block_right)
+        joint_pos_l = [goal_pos[joint] for joint in self.joints[:7]]
+        _block_left: bool = block == "left" or block == "both"
+        self._set_positions_l(joint_pos_l, goal_time, block=_block_left)
         return {f"{joint}.pos": val for joint, val in goal_pos.items()}
 
     def disconnect(self):
