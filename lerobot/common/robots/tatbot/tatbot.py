@@ -136,7 +136,7 @@ class Tatbot(Robot):
             )
             read_joints = self._get_positions_r()
             mismatch: bool = False
-            for i, joint in enumerate(self.joints[:7]):
+            for i, joint in enumerate(self.joints[7:]):
                 if abs(read_joints[i] - joints[i]) > self.config.joint_tolerance:
                     mismatch = True
                     logger.warning(f"🦾❌ Right arm position mismatch: {joint} {read_joints[i]} {joints[i]}")
