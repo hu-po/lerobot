@@ -119,6 +119,7 @@ class Tatbot(Robot):
                 if delta > self.config.joint_tolerance_warning:
                     logger.warning(f"🦾⚠️ Left arm position mismatch: {joint} {read_joints[i]} {joints[i]}")
                 if delta > self.config.joint_tolerance_error:
+                    logger.error(f"🦾❌ Left arm position mismatch: {joint} {read_joints[i]} {joints[i]}")
                     mismatch = True
             if mismatch:
                 raise ValueError("left arm joints mismatch")
@@ -143,6 +144,7 @@ class Tatbot(Robot):
                 if delta > self.config.joint_tolerance_warning:
                     logger.warning(f"🦾⚠️ Right arm position mismatch: {joint} {read_joints[i]} {joints[i]}")
                 if delta > self.config.joint_tolerance_error:
+                    logger.error(f"🦾❌ Right arm position mismatch: {joint} {read_joints[i]} {joints[i]}")
                     mismatch = True
             if mismatch:
                 raise ValueError("right arm joints mismatch")
@@ -193,18 +195,16 @@ class Tatbot(Robot):
 
     def connect(self, calibrate: bool = True) -> None:
         if self.is_connected:
-            raise DeviceAlreadyConnectedError(f"❌🤖 {self} already connected")
-
-        # connect to each arm
+            logger.info(f"✅🤖 {self} already connected.")
+            return
+            # raise DeviceAlreadyConnectedError(f"❌🤖 {self} already connected")
         self._connect_l()
         self._connect_r()
-
         for cam in self.cameras.values():
             try:
                 cam.connect()
             except Exception as e:
                 logger.warning(f"🎥❌Failed to connect to {cam}:\n{e}")
-
         self.configure()
         logger.info(f"✅🤖 {self} connected.")
 
