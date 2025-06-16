@@ -45,16 +45,6 @@ class Tatbot(Robot):
         self.arm_l = None
         self.arm_r = None
         self.cameras = make_cameras_from_configs(config.cameras)
-        if self.config.block_mode == "both":
-            logger.info(f"🤖 {self} block mode: {self.config.block_mode}")
-        elif self.config.block_mode == "left":
-            logger.info(f"🤖 {self} block mode: {self.config.block_mode}")
-        elif self.config.block_mode == "right":
-            logger.info(f"🤖 {self} block mode: {self.config.block_mode}")
-        elif self.config.block_mode == "none":
-            logger.info(f"🤖 {self} block mode: {self.config.block_mode}")
-        else:
-            raise ValueError(f"❌🤖 Invalid block mode: {self.config.block_mode}")
 
     def _connect_l(self, clear_error: bool = True) -> None:
         try:
@@ -111,49 +101,49 @@ class Tatbot(Robot):
             logger.warning(f"🦾❌ Failed to get right arm positions:\n{e}")
             return self.config.home_pos_r
 
-    def _set_positions_l(self, joints: list[float], goal_time: float = 1.0, blocking: bool = True) -> None:
+    def _set_positions_l(self, joints: list[float], goal_time: float = 1.0) -> None:
         if self.arm_l is None:
             logger.warning(f"🦾❌ Left arm is not connected.")
             return
         try:
-            logger.debug(f"🦾 Setting left arm positions: {joints}, goal_time: {goal_time}, blocking: {blocking}")
+            logger.debug(f"🦾 Setting left arm positions: {joints}, goal_time: {goal_time}")
             self.arm_l.set_all_positions(
                 trossen_arm.VectorDouble(joints),
                 goal_time=goal_time,
-                blocking=blocking,
+                blocking=True,
             )
+            read_joints = self._get_positions_l()
+            mismatch: bool = False
+            for i, joint in enumerate(self.joints[:7]):
+                if abs(read_joints[i] - joints[i]) > self.config.joint_tolerance:
+                    mismatch = True
+                    logger.warning(f"🦾❌ Left arm position mismatch: {joint} {read_joints[i]} {joints[i]}")
+            if mismatch:
+                raise ValueError("left arm joints mismatch")
         except Exception as e:
             logger.warning(f"🦾❌ Failed to set left arm positions: \n{type(e)}:\n{e}\n{self._get_error_str_l()}")
 
-    def _set_positions_r(self, joints: list[float], goal_time: float = 1.0, blocking: bool = True) -> None:
+    def _set_positions_r(self, joints: list[float], goal_time: float = 1.0) -> None:
         if self.arm_r is None:
             logger.warning(f"🦾❌ Right arm is not connected.")
             return
         try:
-            logger.debug(f"🦾 Setting right arm positions: {joints}, goal_time: {goal_time}, blocking: {blocking}")
+            logger.debug(f"🦾 Setting right arm positions: {joints}, goal_time: {goal_time}")
             self.arm_r.set_all_positions(
                 trossen_arm.VectorDouble(joints),
                 goal_time=goal_time,
-                blocking=blocking,
+                blocking=True,
             )
+            read_joints = self._get_positions_l()
+            mismatch: bool = False
+            for i, joint in enumerate(self.joints[:7]):
+                if abs(read_joints[i] - joints[i]) > self.config.joint_tolerance:
+                    mismatch = True
+                    logger.warning(f"🦾❌ Left arm position mismatch: {joint} {read_joints[i]} {joints[i]}")
+            if mismatch:
+                raise ValueError("right arm joints mismatch")
         except Exception as e:
             logger.warning(f"🦾❌ Failed to set right arm positions: \n{type(e)}:\n{e}\n{self._get_error_str_r()}")
-
-    def _set_positions(self, joints_l: list[float], joints_r: list[float], goal_time: float = 1.0, block_mode: str = None) -> None:
-        logger.debug(f"🤖 {self} setting positions: {joints_l}, {joints_r}, goal_time: {goal_time}, block_mode: {block_mode}")
-        block_mode = self.config.block_mode if block_mode is None else block_mode
-        if block_mode == "both":
-            self._set_positions_l(joints_l, goal_time, blocking=True)
-            self._set_positions_r(joints_r, goal_time, blocking=True)
-        elif block_mode == "left":
-            self._set_positions_r(joints_r, goal_time, blocking=False)
-            self._set_positions_l(joints_l, goal_time, blocking=True)
-        elif block_mode == "right":
-            self._set_positions_l(joints_l, goal_time, blocking=False)
-            self._set_positions_r(joints_r, goal_time, blocking=True)
-        elif block_mode == "none":
-            self._set_positions_l(joints_l, goal_time, blocking=False)
-            self._set_positions_r(joints_r, goal_time, blocking=False)
 
     def _get_error_str_l(self) -> str:
         if self.arm_l is None:
@@ -254,7 +244,7 @@ class Tatbot(Robot):
 
         return obs_dict
 
-    def send_action(self, action: dict[str, Any], goal_time: float = None, block_mode: str = None) -> dict[str, Any]:
+    def send_action(self, action: dict[str, Any], goal_time: float = None) -> dict[str, Any]:
         if not self.is_connected:
             logger.warning(f"❌🤖 {self} is not connected.")
             # raise DeviceNotConnectedError(f"{self} is not connected.")
@@ -262,8 +252,9 @@ class Tatbot(Robot):
         goal_time = self.config.goal_time_fast if goal_time is None else goal_time
         goal_pos = {key.removesuffix(".pos"): val for key, val in action.items() if key.endswith(".pos")}
         joint_pos_l = [goal_pos[joint] for joint in self.joints[:7]]
+        self._set_positions_l(joint_pos_l, goal_time)
         joint_pos_r = [goal_pos[joint] for joint in self.joints[7:]]
-        self._set_positions(joint_pos_l, joint_pos_r, goal_time, block_mode)
+        self._set_positions_r(joint_pos_r, goal_time)
         return {f"{joint}.pos": val for joint, val in goal_pos.items()}
 
     def disconnect(self):
@@ -272,7 +263,8 @@ class Tatbot(Robot):
             # raise DeviceNotConnectedError(f"{self} is not connected.")
 
         logger.info(f"🤖 {self} going to home position.")
-        self._set_positions(self.config.home_pos_l, self.config.home_pos_r)
+        self._set_positions_l(self.config.home_pos_l)
+        self._set_positions_r(self.config.home_pos_r)
 
         if self.arm_l is not None:
             try:

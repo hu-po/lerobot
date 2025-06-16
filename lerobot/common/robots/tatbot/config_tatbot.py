@@ -15,19 +15,13 @@ class TatbotConfig(RobotConfig):
     """Robot travel time when moving slowly, usually larger movements."""
     connection_timeout: float = 5.0
     """Timeout when connecting to the robot arms in seconds."""
+    joint_tolerance: float = 1e-3
+    """Tolerance for joint position mismatch."""
 
     home_pos_l: list[float] = field(default_factory=lambda: [1.5708 - 0.3] + [0.0] * 6)
     """Radian joint positions of the left arm: folded up, resting on itself, rotated slightly inwards."""
     home_pos_r: list[float] = field(default_factory=lambda: [0.3] + [0.0] * 6)
     """Radian joint positions of the right arm: folded up, resting on itself, rotated slightly inwards."""
-
-    block_mode: str = "both"
-    """Block mode of the robot arms when sending bimanual actions:
-    - "both": blocks on both arms, moving one at a time
-    - "none": no blocking, both arms move at the same time
-    - "left": blocks on the left arm, right arm moves first
-    - "right": blocks on the right arm, left arm moves first
-    """
 
     ip_address_l: str = "192.168.1.3"
     """IP address of the left robot arm."""
