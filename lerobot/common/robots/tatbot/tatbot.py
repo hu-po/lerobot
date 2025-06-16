@@ -58,7 +58,7 @@ class Tatbot(Robot):
                 timeout=self.config.connection_timeout,
             )
             self.arm_l.set_all_modes(trossen_arm.Mode.position)
-            self._set_positions_l(self.config.home_pos_l, self.config.goal_time_slow, True)
+            self._set_positions_l(self.config.home_pos_l, self.config.goal_time_slow)
         except Exception as e:
             logger.warning(f"🦾❌ Failed to connect to {self} left arm:\n{e}")
             self.arm_l = None
@@ -76,7 +76,7 @@ class Tatbot(Robot):
                 timeout=self.config.connection_timeout,
             )
             self.arm_r.set_all_modes(trossen_arm.Mode.position)
-            self._set_positions_r(self.config.home_pos_r, self.config.goal_time_slow, True)
+            self._set_positions_r(self.config.home_pos_r, self.config.goal_time_slow)
         except Exception as e:
             logger.warning(f"🦾❌ Failed to connect to {self} right arm:\n{e}")
         logger.info(f"✅🦾 {self} right arm connected.")
@@ -263,8 +263,8 @@ class Tatbot(Robot):
             # raise DeviceNotConnectedError(f"{self} is not connected.")
 
         logger.info(f"🤖 {self} going to home position.")
-        self._set_positions_l(self.config.home_pos_l)
-        self._set_positions_r(self.config.home_pos_r)
+        self._set_positions_l(self.config.home_pos_l, goal_time=self.config.goal_time_slow)
+        self._set_positions_r(self.config.home_pos_r, goal_time=self.config.goal_time_slow)
 
         if self.arm_l is not None:
             try:
