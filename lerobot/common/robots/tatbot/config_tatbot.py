@@ -33,13 +33,13 @@ class TatbotConfig(RobotConfig):
     # cameras
     cameras: dict[str, CameraConfig] = field(
         default_factory=lambda: {
-            "head": RealSenseCameraConfig(
+            "realsense1": RealSenseCameraConfig(
                 fps=30,
                 width=640,
                 height=480,
                 serial_number_or_name="218622278376",
             ),
-            "wrist": RealSenseCameraConfig(
+            "realsense2": RealSenseCameraConfig(
                 fps=30,
                 width=640,
                 height=480,
