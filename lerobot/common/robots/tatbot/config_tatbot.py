@@ -22,9 +22,9 @@ class TatbotConfig(RobotConfig):
     """Error tolerance for joint position error."""
 
     home_pos_l: list[float] = field(default_factory=lambda: [0.0] * 7)
-    """Radian joint positions of the left arm: folded up, resting on itself, rotated slightly inwards."""
+    """Radian joint positions of the left arm: folded up, resting on itself, facing forwards."""
     home_pos_r: list[float] = field(default_factory=lambda: [0.0] * 7)
-    """Radian joint positions of the right arm: folded up, resting on itself, rotated slightly inwards."""
+    """Radian joint positions of the right arm: folded up, resting on itself, facing forwards."""
 
     ip_address_l: str = "192.168.1.3"
     """IP address of the left robot arm."""

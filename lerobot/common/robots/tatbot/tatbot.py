@@ -79,6 +79,7 @@ class Tatbot(Robot):
             self._set_positions_r(self.config.home_pos_r, self.config.goal_time_slow)
         except Exception as e:
             logger.warning(f"🦾❌ Failed to connect to {self} right arm:\n{e}")
+            self.arm_r = None
         logger.info(f"✅🦾 {self} right arm connected.")
 
     def _get_positions_l(self) -> list[float]:
