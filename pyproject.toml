@@ -104,7 +104,7 @@ hilserl = ["transformers>=4.50.3", "gym-hil>=0.1.8", "protobuf>=5.29.3", "grpcio
 umi = ["imagecodecs>=2024.1.1"]
 video_benchmark = ["scikit-image>=0.23.2", "pandas>=2.2.2"]
 xarm = ["gym-xarm>=0.1.1 ; python_version < '4.0'"]
-tatbot = ["trossen-arm==1.8.2"]
+tatbot = ["trossen-arm==1.8.3"]
 
 [tool.poetry]
 requires-poetry = ">=2.1"
