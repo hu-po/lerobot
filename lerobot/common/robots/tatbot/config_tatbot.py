@@ -2,6 +2,7 @@ from dataclasses import dataclass, field
 
 from lerobot.common.cameras import CameraConfig
 from lerobot.common.cameras.realsense import RealSenseCameraConfig
+from lerobot.common.cameras.opencv import OpenCVCameraConfig
 
 from ..config import RobotConfig
 
@@ -44,6 +45,56 @@ class TatbotConfig(RobotConfig):
                 width=640,
                 height=480,
                 serial_number_or_name="230422273017",
+            ),
+            "camera1": OpenCVCameraConfig(
+                ip="192.168.1.91",
+                username="admin",
+                password="${CAMERA_1_PASSWORD}",
+                rtsp_port=554,
+                stream_path="/cam/realmonitor?channel=1&subtype=0",
+                width=2592,
+                height=1944,
+                fps=1,
+            ),
+            "camera2": OpenCVCameraConfig(
+                ip="192.168.1.92",
+                username="admin",
+                password="${CAMERA_2_PASSWORD}",
+                rtsp_port=554,
+                stream_path="/cam/realmonitor?channel=1&subtype=0",
+                width=2592,
+                height=1944,
+                fps=1,
+            ),
+            "camera3": OpenCVCameraConfig(
+                ip="192.168.1.93",
+                username="admin",
+                password="${CAMERA_3_PASSWORD}",
+                rtsp_port=554,
+                stream_path="/cam/realmonitor?channel=1&subtype=0",
+                width=2592,
+                height=1944,
+                fps=1,
+            ),
+            "camera4": OpenCVCameraConfig(
+                ip="192.168.1.94",
+                username="admin",
+                password="${CAMERA_4_PASSWORD}",
+                rtsp_port=554,
+                stream_path="/cam/realmonitor?channel=1&subtype=0",
+                width=2592,
+                height=1944,
+                fps=1,
+            ),
+            "camera5": OpenCVCameraConfig(
+                ip="192.168.1.95",
+                username="admin",
+                password="${CAMERA_5_PASSWORD}",
+                rtsp_port=554,
+                stream_path="/cam/realmonitor?channel=1&subtype=0",
+                width=2592,
+                height=1944,
+                fps=1,
             ),
         }
     )

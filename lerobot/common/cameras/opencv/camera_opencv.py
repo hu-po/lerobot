@@ -196,9 +196,15 @@ class OpenCVCamera(Camera):
         if not self.is_connected:
             raise DeviceNotConnectedError(f"Cannot configure settings for {self} as it is not connected.")
 
+        # For IP cameras, we often cannot set these properties.
+        # We rely on the stream providing the correct resolution and FPS.
+        is_ip_camera = isinstance(self.index_or_path, str) and self.index_or_path.startswith("rtsp://")
+        if is_ip_camera:
+            logger.info("IP camera detected, skipping FPS and resolution validation.")
+
         if self.fps is None:
             self.fps = self.videocapture.get(cv2.CAP_PROP_FPS)
-        else:
+        elif not is_ip_camera:
             self._validate_fps()
 
         default_width = int(round(self.videocapture.get(cv2.CAP_PROP_FRAME_WIDTH)))
@@ -210,7 +216,7 @@ class OpenCVCamera(Camera):
             if self.rotation in [cv2.ROTATE_90_CLOCKWISE, cv2.ROTATE_90_COUNTERCLOCKWISE]:
                 self.width, self.height = default_height, default_width
                 self.capture_width, self.capture_height = default_width, default_height
-        else:
+        elif not is_ip_camera:
             self._validate_width_and_height()
 
     def _validate_fps(self) -> None:
