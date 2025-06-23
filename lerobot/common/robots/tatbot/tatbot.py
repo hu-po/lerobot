@@ -57,6 +57,7 @@ class Tatbot(Robot):
                 clear_error,
                 timeout=self.config.connection_timeout,
             )
+            self.arm_l.load_configs_from_file(self.config.arm_l_config_filepath)
             self.arm_l.set_all_modes(trossen_arm.Mode.position)
             self._set_positions_l(self.config.home_pos_l, self.config.goal_time_slow)
         except Exception as e:
@@ -75,6 +76,7 @@ class Tatbot(Robot):
                 clear_error,
                 timeout=self.config.connection_timeout,
             )
+            self.arm_r.load_configs_from_file(self.config.arm_r_config_filepath)
             self.arm_r.set_all_modes(trossen_arm.Mode.position)
             self._set_positions_r(self.config.home_pos_r, self.config.goal_time_slow)
         except Exception as e:
