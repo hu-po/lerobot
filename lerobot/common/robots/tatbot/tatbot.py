@@ -70,7 +70,7 @@ class Tatbot(Robot):
             self.arm_r = trossen_arm.TrossenArmDriver()
             self.arm_r.configure(
                 trossen_arm.Model.wxai_v0,
-                trossen_arm.StandardEndEffector.wxai_v0_follower,
+                trossen_arm.StandardEndEffector.wxai_v0_base,
                 self.config.ip_address_r,
                 clear_error,
                 timeout=self.config.connection_timeout,
