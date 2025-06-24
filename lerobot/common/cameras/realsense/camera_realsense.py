@@ -184,7 +184,7 @@ class RealSenseCamera(Camera):
 
         if warmup:
             time.sleep(
-                3
+                2
             )  # NOTE(Steven): RS cameras need a bit of time to warm up before the first read. If we don't wait, the first read from the warmup will raise.
             start_time = time.time()
             while time.time() - start_time < self.warmup_s:
