@@ -68,12 +68,14 @@ TatbotScanConfig = TatbotConfig(
                 width=1280,
                 height=720,
                 serial_number_or_name="218622278376",
+                warmup_s=5,
             ),
             "realsense2": RealSenseCameraConfig(
                 fps=5,
                 width=1280,
                 height=720,
                 serial_number_or_name="230422273017",
+                warmup_s=5,
             ),
             "camera1": OpenCVCameraConfig(
                 ip="192.168.1.91",
