@@ -1,9 +1,9 @@
 from dataclasses import dataclass, field
 import os
 
-from lerobot.common.cameras import CameraConfig
-from lerobot.common.cameras.realsense import RealSenseCameraConfig
-from lerobot.common.cameras.opencv import OpenCVCameraConfig
+from lerobot.cameras import CameraConfig
+from lerobot.cameras.realsense import RealSenseCameraConfig
+from lerobot.cameras.opencv import OpenCVCameraConfig
 
 from ..config import RobotConfig
 
@@ -29,12 +29,12 @@ class TatbotConfig(RobotConfig):
 
     ip_address_l: str = "192.168.1.3"
     """IP address of the left robot arm."""
-    arm_l_config_filepath: str = os.path.expanduser("~/tatbot/config/trossen_arm_l.yaml")
+    arm_l_config_filepath: str = os.path.expanduser("~/tatbot/config/trossen/arm_l.yaml")
     """YAML file containing left arm config."""
 
     ip_address_r: str = "192.168.1.2"
     """IP address of the right robot arm."""
-    arm_r_config_filepath: str = os.path.expanduser("~/tatbot/config/trossen_arm_r.yaml")
+    arm_r_config_filepath: str = os.path.expanduser("~/tatbot/config/trossen/arm_r.yaml")
     """YAML file containing right arm config."""
 
     # cameras
