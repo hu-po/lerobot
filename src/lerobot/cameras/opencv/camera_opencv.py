@@ -129,7 +129,11 @@ class OpenCVCamera(Camera):
                 self.capture_width, self.capture_height = self.height, self.width
 
     def __str__(self) -> str:
-        return f"{self.__class__.__name__}({self.index_or_path})"
+        if self.config.ip:
+            # return ip address for rtsp cameras to not leak password
+            return f"{self.__class__.__name__}({self.config.ip})"
+        else:
+            return f"{self.__class__.__name__}({self.index_or_path})"
 
     @property
     def is_connected(self) -> bool:

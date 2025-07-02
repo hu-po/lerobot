@@ -37,14 +37,6 @@ class OpenCVCameraConfig(CameraConfig):
 
     # Advanced configurations
     OpenCVCameraConfig(128422271347, 30, 640, 480, rotation=Cv2Rotation.ROTATE_90)     # With 90° rotation
-    
-    # IP camera configuration
-    OpenCVCameraConfig(
-        ip="192.168.1.64",
-        username="admin",
-        password="${CAM_PASSWORD}", # using env var
-        stream_path="/stream1"
-    )
     ```
 
     Attributes:
@@ -61,10 +53,9 @@ class OpenCVCameraConfig(CameraConfig):
         username: Username for RTSP stream authentication.
         password: Password for RTSP stream authentication. Can be an env var like `${VAR}`.
         rtsp_port: Port for the RTSP stream.
-        stream_path: Path of the RTSP stream.
 
     Note:
-        - Only 3-channel color output (RGB/BGR) is supported.
+        - Only 3-channel color output (RGB/BGR) is currently supported.
     """
 
     index_or_path: Optional[int | Path] = None
@@ -77,29 +68,10 @@ class OpenCVCameraConfig(CameraConfig):
     username: Optional[str] = None
     password: Optional[str] = None
     rtsp_port: int = 554
-    stream_path: Optional[str] = None
 
     def __post_init__(self):
         if self.ip:
-            # IP camera configuration
-            password = self.password
-            if password and password.startswith('${') and password.endswith('}'):
-                env_var = password[2:-1]
-                password = os.environ.get(env_var)
-                if password is None:
-                    raise ValueError(f"Environment variable '{env_var}' for camera password not set.")
-
-            if self.username and password:
-                credentials = f"{self.username}:{password}@"
-            elif self.username:
-                credentials = f"{self.username}@"
-            else:
-                credentials = ""
-            
-            self.index_or_path = f"rtsp://{credentials}{self.ip}:{self.rtsp_port}{self.stream_path or ''}"
-
-        elif self.index_or_path is None:
-            raise ValueError("Either 'index_or_path' or 'ip' must be provided.")
+            self.index_or_path = f"rtsp://{self.username}:{self.password}@{self.ip}:{self.rtsp_port}"
 
         if self.color_mode not in (ColorMode.RGB, ColorMode.BGR):
             raise ValueError(
