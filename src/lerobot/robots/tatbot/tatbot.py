@@ -257,6 +257,26 @@ class Tatbot(Robot):
 
         return obs_dict
 
+    def _urdf_joints_to_action(self, urdf_joints: list[float]) -> dict[str, float]:
+        _action = {
+            "left.joint_0.pos": urdf_joints[0],
+            "left.joint_1.pos": urdf_joints[1],
+            "left.joint_2.pos": urdf_joints[2],
+            "left.joint_3.pos": urdf_joints[3],
+            "left.joint_4.pos": urdf_joints[4],
+            "left.joint_5.pos": urdf_joints[5],
+            "left.gripper.pos": urdf_joints[6],
+            "right.joint_0.pos": urdf_joints[8],
+            "right.joint_1.pos": urdf_joints[9],
+            "right.joint_2.pos": urdf_joints[10],
+            "right.joint_3.pos": urdf_joints[11],
+            "right.joint_4.pos": urdf_joints[12],
+            "right.joint_5.pos": urdf_joints[13],
+            "right.gripper.pos": urdf_joints[14],
+        }
+        logger.debug(f"🤖 Action: {_action}")
+        return _action
+        
     def send_action(self, action: dict[str, Any], goal_time: float = None, block: str = "both") -> dict[str, Any]:
         if not self.is_connected:
             logger.warning(f"❌🤖 {self} is not connected.")
