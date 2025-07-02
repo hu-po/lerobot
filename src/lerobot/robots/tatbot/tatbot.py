@@ -5,7 +5,7 @@ from typing import Any
 
 import numpy as np
 from lerobot.cameras.utils import make_cameras_from_configs
-from lerobot.errors import DeviceAlreadyConnectedError #, DeviceNotConnectedError
+# from lerobot.errors import DeviceAlreadyConnectedError, DeviceNotConnectedError
 
 import trossen_arm
 
@@ -45,6 +45,7 @@ class Tatbot(Robot):
         self.arm_l = None
         self.arm_r = None
         self.cameras = make_cameras_from_configs(config.cameras)
+        self.scan_cameras = make_cameras_from_configs(config.scan_cameras)
 
     def _connect_l(self, clear_error: bool = True) -> None:
         try:
@@ -207,7 +208,12 @@ class Tatbot(Robot):
             try:
                 cam.connect()
             except Exception as e:
-                logger.warning(f"🎥❌Failed to connect to {cam}:\n{e}")
+                logger.warning(f"🎥❌Failed to connect to camera: {cam}: \n{e}")
+        for cam in self.scan_cameras.values():
+            try:
+                cam.connect()
+            except Exception as e:
+                logger.warning(f"🎥❌Failed to connect to scan camera: {cam}: \n{e}")
         self.configure()
         logger.info(f"✅🤖 {self} connected.")
 
@@ -265,6 +271,20 @@ class Tatbot(Robot):
         _block_left: bool = block == "left" or block == "both"
         self._set_positions_l(joint_pos_l, goal_time, block=_block_left)
         return {f"{joint}.pos": val for joint, val in goal_pos.items()}
+
+    def scan(self) -> dict[str, Any]:
+        logger.debug(f"🤖🎥 {self} performing scan...")
+        obs_dict = {}
+        for cam_key, cam in self.scan_cameras.items():
+            start = time.perf_counter()
+            try:
+                obs_dict[cam_key] = cam.async_read()
+            except Exception as e:
+                logger.warning(f"❌🎥 Failed to read {cam_key}:\n{e}")
+                obs_dict[cam_key] = np.zeros((cam.height, cam.width, 3), dtype=np.uint8)
+            dt_ms = (time.perf_counter() - start) * 1e3
+            logger.debug(f"{self} read {cam_key}: {dt_ms:.1f}ms")
+        return obs_dict
 
     def disconnect(self):
         if not self.is_connected:

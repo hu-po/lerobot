@@ -55,28 +55,9 @@ class TatbotConfig(RobotConfig):
         }
     )
 
-# in bot-only mode, do not use any cameras
-TatbotBotOnlyConfig = TatbotConfig(
-    cameras={},
-)
-
-# in scan mode, use all the cameras at max resolution
-TatbotScanConfig = TatbotConfig(
-    cameras={
-            "realsense1": RealSenseCameraConfig(
-                fps=5,
-                width=1280,
-                height=720,
-                serial_number_or_name="218622278376",
-                warmup_s=2,
-            ),
-            "realsense2": RealSenseCameraConfig(
-                fps=5,
-                width=1280,
-                height=720,
-                serial_number_or_name="230422273017",
-                warmup_s=2,
-            ),
+    # scan cameras are only used at the beginning of each episode
+    scan_cameras: dict[str, CameraConfig] = field(
+        default_factory=lambda: {
             "camera1": OpenCVCameraConfig(
                 ip="192.168.1.91",
                 username="admin",
@@ -85,7 +66,7 @@ TatbotScanConfig = TatbotConfig(
                 stream_path="/cam/realmonitor?channel=1&subtype=0",
                 width=2960,
                 height=1668,
-                fps=5,
+                fps=1,
             ),
             "camera2": OpenCVCameraConfig(
                 ip="192.168.1.92",
@@ -95,7 +76,7 @@ TatbotScanConfig = TatbotConfig(
                 stream_path="/cam/realmonitor?channel=1&subtype=0",
                 width=2960,
                 height=1668,
-                fps=5,
+                fps=1,
             ),
             "camera3": OpenCVCameraConfig(
                 ip="192.168.1.93",
@@ -105,7 +86,7 @@ TatbotScanConfig = TatbotConfig(
                 stream_path="/cam/realmonitor?channel=1&subtype=0",
                 width=2960,
                 height=1668,
-                fps=5,
+                fps=1,
             ),
             "camera4": OpenCVCameraConfig(
                 ip="192.168.1.94",
@@ -115,7 +96,7 @@ TatbotScanConfig = TatbotConfig(
                 stream_path="/cam/realmonitor?channel=1&subtype=0",
                 width=2960,
                 height=1668,
-                fps=5,
+                fps=1,
             ),
             "camera5": OpenCVCameraConfig(
                 ip="192.168.1.95",
@@ -125,7 +106,7 @@ TatbotScanConfig = TatbotConfig(
                 stream_path="/cam/realmonitor?channel=1&subtype=0",
                 width=2960,
                 height=1668,
-                fps=5,
+                fps=1,
             ),
         }
-)
+    )

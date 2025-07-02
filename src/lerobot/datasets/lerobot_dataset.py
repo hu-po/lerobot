@@ -250,6 +250,7 @@ class LeRobotDatasetMetadata:
         episode_length: int,
         episode_tasks: list[str],
         episode_stats: dict[str, dict],
+        episode_cond: dict | None = None,
     ) -> None:
         self.info["total_episodes"] += 1
         self.info["total_frames"] += episode_length
@@ -270,6 +271,8 @@ class LeRobotDatasetMetadata:
             "tasks": episode_tasks,
             "length": episode_length,
         }
+        if episode_cond is not None:
+            episode_dict["condition"] = episode_cond
         self.episodes[episode_index] = episode_dict
         write_episode(episode_dict, self.root)
 
