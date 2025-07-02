@@ -71,7 +71,7 @@ class OpenCVCameraConfig(CameraConfig):
 
     def __post_init__(self):
         if self.ip:
-            self.index_or_path = f"rtsp://{self.username}:{self.password}@{self.ip}:{self.rtsp_port}?rtsp_transport=tcp"
+            self.index_or_path = f"rtsp://{self.username}:{self.password}@{self.ip}:{self.rtsp_port}" #?rtsp_transport=tcp"
 
         if self.color_mode not in (ColorMode.RGB, ColorMode.BGR):
             raise ValueError(
