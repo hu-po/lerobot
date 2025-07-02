@@ -55,8 +55,8 @@ class TatbotConfig(RobotConfig):
         }
     )
 
-    # scan cameras are only used at the beginning of each episode
-    scan_cameras: dict[str, CameraConfig] = field(
+    # conditioning cameras are only used at the beginning of each episode
+    cond_cameras: dict[str, CameraConfig] = field(
         default_factory=lambda: {
             "camera1": OpenCVCameraConfig(
                 ip="192.168.1.91",

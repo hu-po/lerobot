@@ -45,7 +45,7 @@ class Tatbot(Robot):
         self.arm_l = None
         self.arm_r = None
         self.cameras = make_cameras_from_configs(config.cameras)
-        self.scan_cameras = make_cameras_from_configs(config.scan_cameras)
+        self.cond_cameras = make_cameras_from_configs(config.cond_cameras)
 
     def _connect_l(self, clear_error: bool = True) -> None:
         try:
@@ -209,11 +209,11 @@ class Tatbot(Robot):
                 cam.connect()
             except Exception as e:
                 logger.warning(f"🎥❌Failed to connect to camera: {cam}: \n{e}")
-        for cam in self.scan_cameras.values():
+        for cam in self.cond_cameras.values():
             try:
                 cam.connect()
             except Exception as e:
-                logger.warning(f"🎥❌Failed to connect to scan camera: {cam}: \n{e}")
+                logger.warning(f"🎥❌Failed to connect to conditioning camera: {cam}: \n{e}")
         self.configure()
         logger.info(f"✅🤖 {self} connected.")
 
@@ -272,10 +272,10 @@ class Tatbot(Robot):
         self._set_positions_l(joint_pos_l, goal_time, block=_block_left)
         return {f"{joint}.pos": val for joint, val in goal_pos.items()}
 
-    def scan(self) -> dict[str, Any]:
-        logger.debug(f"🤖🎥 {self} performing scan...")
+    def get_conditioning(self) -> dict[str, Any]:
+        logger.debug(f"🤖🎥 {self} performing conditioning...")
         obs_dict = {}
-        for cam_key, cam in self.scan_cameras.items():
+        for cam_key, cam in self.cond_cameras.items():
             start = time.perf_counter()
             try:
                 obs_dict[cam_key] = cam.async_read()

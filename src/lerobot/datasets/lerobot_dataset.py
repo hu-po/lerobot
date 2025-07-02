@@ -810,7 +810,7 @@ class LeRobotDataset(torch.utils.data.Dataset):
 
         self.episode_buffer["size"] += 1
 
-    def save_episode(self, episode_data: dict | None = None) -> None:
+    def save_episode(self, episode_data: dict | None = None, episode_cond: dict | None = None) -> None:
         """
         This will save to disk the current episode in self.episode_buffer.
 
@@ -859,7 +859,7 @@ class LeRobotDataset(torch.utils.data.Dataset):
                 episode_buffer[key] = video_paths[key]
 
         # `meta.save_episode` be executed after encoding the videos
-        self.meta.save_episode(episode_index, episode_length, episode_tasks, ep_stats)
+        self.meta.save_episode(episode_index, episode_length, episode_tasks, ep_stats, episode_cond)
 
         ep_data_index = get_episode_data_index(self.meta.episodes, [episode_index])
         ep_data_index_np = {k: t.numpy() for k, t in ep_data_index.items()}
