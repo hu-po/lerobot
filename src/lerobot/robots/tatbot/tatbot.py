@@ -2,6 +2,7 @@ import logging
 import time
 from functools import cached_property
 from typing import Any
+import os
 
 import numpy as np
 from lerobot.cameras.utils import make_cameras_from_configs
@@ -58,7 +59,9 @@ class Tatbot(Robot):
                 clear_error,
                 timeout=self.config.connection_timeout,
             )
-            self.arm_l.load_configs_from_file(self.config.arm_l_config_filepath)
+            config_filepath = os.path.expanduser(self.config.arm_l_config_filepath)
+            logger.debug(f"🦾 Loading left arm config from {config_filepath}")
+            self.arm_l.load_configs_from_file(config_filepath)
             self.arm_l.set_all_modes(trossen_arm.Mode.position)
             self._set_positions_l(self.config.home_pos_l, self.config.goal_time_slow)
         except Exception as e:
@@ -77,7 +80,9 @@ class Tatbot(Robot):
                 clear_error,
                 timeout=self.config.connection_timeout,
             )
-            self.arm_r.load_configs_from_file(self.config.arm_r_config_filepath)
+            config_filepath = os.path.expanduser(self.config.arm_r_config_filepath)
+            logger.debug(f"🦾 Loading right arm config from {config_filepath}")
+            self.arm_r.load_configs_from_file(config_filepath)
             self.arm_r.set_all_modes(trossen_arm.Mode.position)
             self._set_positions_r(self.config.home_pos_r, self.config.goal_time_slow)
         except Exception as e:
