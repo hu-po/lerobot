@@ -213,8 +213,7 @@ class Tatbot(Robot):
             logger.info(f"✅🤖 {self} already connected.")
             return
             # raise DeviceAlreadyConnectedError(f"❌🤖 {self} already connected")
-        self._connect_l()
-        self._connect_r()
+
         for cam in self.cameras.values():
             try:
                 cam.connect()
@@ -225,6 +224,8 @@ class Tatbot(Robot):
                 cam.connect()
             except Exception as e:
                 logger.warning(f"🎥❌Failed to connect to conditioning camera: {cam}: \n{e}")
+        self._connect_l()
+        self._connect_r()
         self.configure()
         logger.info(f"✅🤖 {self} connected.")
 
