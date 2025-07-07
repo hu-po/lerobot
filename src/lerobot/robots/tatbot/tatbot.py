@@ -116,6 +116,9 @@ class Tatbot(Robot):
             return
         try:
             logger.debug(f"🦾 Setting left arm positions: {joints}, goal_time: {goal_time}")
+            if len(joints) != 7:
+                logger.warning(f"🦾❌ Left arm positions length mismatch: {len(joints)} != 7")
+                joints = joints[:7]
             self.arm_l.set_all_positions(
                 trossen_arm.VectorDouble(joints),
                 goal_time=goal_time,
@@ -141,6 +144,9 @@ class Tatbot(Robot):
             return
         try:
             logger.debug(f"🦾 Setting right arm positions: {joints}, goal_time: {goal_time}")
+            if len(joints) != 7:
+                logger.warning(f"🦾❌ Right arm positions length mismatch: {len(joints)} != 7")
+                joints = joints[:7]
             self.arm_r.set_all_positions(
                 trossen_arm.VectorDouble(joints),
                 goal_time=goal_time,
