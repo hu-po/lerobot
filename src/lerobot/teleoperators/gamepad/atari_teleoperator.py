@@ -69,11 +69,13 @@ class AtariTeleoperator(Teleoperator):
             for event in self.device.read_loop():
                 if self._stop_event.is_set():
                     break
-                if event.type == ecodes.EV_KEY and event.code == ecodes.BTN_TRIGGER:
-                    if event.value == 1:
-                        self._put_event({'red_button': True})
-                    elif event.value == 0:
-                        self._put_event({'red_button': False})
+                if event.type == ecodes.EV_KEY:
+                    print(f"[AtariTeleoperator DEBUG] KEY EVENT: code={event.code}, value={event.value}")
+                    if event.code == ecodes.BTN_TRIGGER:
+                        if event.value == 1:
+                            self._put_event({'red_button': True})
+                        elif event.value == 0:
+                            self._put_event({'red_button': False})
                 elif event.type == ecodes.EV_ABS:
                     axis = None
                     if event.code == ecodes.ABS_X:

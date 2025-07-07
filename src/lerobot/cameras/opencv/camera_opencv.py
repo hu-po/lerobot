@@ -204,7 +204,7 @@ class OpenCVCamera(Camera):
         # We rely on the stream providing the correct resolution and FPS.
         is_ip_camera = isinstance(self.index_or_path, str) and self.index_or_path.startswith("rtsp://")
         if is_ip_camera:
-            logger.info("IP camera detected, skipping FPS and resolution validation.")
+            logger.debug("IP camera detected, skipping FPS and resolution validation.")
 
         if self.fps is None:
             self.fps = self.videocapture.get(cv2.CAP_PROP_FPS)
