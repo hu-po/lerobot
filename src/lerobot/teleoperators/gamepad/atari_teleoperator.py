@@ -66,14 +66,11 @@ class AtariTeleoperator(Teleoperator):
         return None
 
     def _event_loop(self):
-        print("[AtariTeleoperator DEBUG] Event loop started")
         try:
             for event in self.device.read_loop():
-                print(f"[AtariTeleoperator DEBUG] EVENT: type={event.type}, code={event.code}, value={event.value}")
                 if self._stop_event.is_set():
                     break
                 if event.type == ecodes.EV_KEY:
-                    print(f"[AtariTeleoperator DEBUG] KEY EVENT: code={event.code}, value={event.value}")
                     if event.code == RED_BUTTON_CODE:
                         if event.value == 1:
                             self._put_event({'red_button': True})
