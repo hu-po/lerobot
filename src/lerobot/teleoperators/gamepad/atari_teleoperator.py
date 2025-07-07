@@ -8,6 +8,7 @@ from ..teleoperator import Teleoperator
 from ..config import TeleoperatorConfig
 
 ATARI_NAME = "Retro Games LTD  Atari CX Wireless Controller"
+RED_BUTTON_CODE = 304  # Detected from debug logs
 
 @TeleoperatorConfig.register_subclass("atari")
 @dataclass
@@ -73,7 +74,7 @@ class AtariTeleoperator(Teleoperator):
                     break
                 if event.type == ecodes.EV_KEY:
                     print(f"[AtariTeleoperator DEBUG] KEY EVENT: code={event.code}, value={event.value}")
-                    if event.code == ecodes.BTN_TRIGGER:
+                    if event.code == RED_BUTTON_CODE:
                         if event.value == 1:
                             self._put_event({'red_button': True})
                         elif event.value == 0:
