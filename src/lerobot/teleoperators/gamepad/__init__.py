@@ -16,3 +16,4 @@
 
 from .configuration_gamepad import GamepadTeleopConfig
 from .teleop_gamepad import GamepadTeleop
+from .atari_teleoperator import AtariTeleoperator, AtariTeleoperatorConfig
