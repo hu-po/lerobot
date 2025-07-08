@@ -166,6 +166,54 @@ class Tatbot(Robot):
         except Exception as e:
             logger.warning(f"🦾❌ Failed to set right arm positions: \n{type(e)}:\n{e}\n{self._get_error_str_r()}")
 
+    # TODO: cartesian control?
+    # # https://en.wikipedia.org/wiki/Axis%E2%80%93angle_representation
+    # # https://docs.trossenrobotics.com/trossen_arm/main/api/classtrossen__arm_1_1TrossenArmDriver.html
+    # def _set_cartesian_l(
+    #     self,
+    #     goal_positions: list[float],
+    #     interpolation_space: str = "cartesian",
+    #     goal_time: float = 2.0,
+    #     block: bool = True,
+    # ) -> None:
+    #     if self.arm_l is None:
+    #         logger.warning("🦾❌ Left arm is not connected.")
+    #         return
+    #     try:
+    #         from scipy.spatial.transform import Rotation as R
+    #         rotvec = R.from_quat([goal_positions[3], goal_positions[4], goal_positions[5], goal_positions[6]]).as_rotvec()
+    #         goal_positions[3:] = rotvec
+    #         interp_space = getattr(trossen_arm.InterpolationSpace, interpolation_space)
+    #         self.arm_l.set_cartesian_positions(
+    #             trossen_arm.VectorDouble(goal_positions),
+    #             interp_space,
+    #             goal_time,
+    #             block,
+    #         )
+    #     except Exception as e:
+    #         logger.warning(f"🦾❌ Failed to set left arm cartesian positions: \n{type(e)}:\n{e}")
+
+    # def _set_cartesian_r(
+    #     self,
+    #     goal_positions: list[float],
+    #     interpolation_space: str = "cartesian",
+    #     goal_time: float = 2.0,
+    #     block: bool = True,
+    # ) -> None:
+    #     if self.arm_r is None:
+    #         logger.warning("🦾❌ Right arm is not connected.")
+    #         return
+    #     try:
+    #         interp_space = getattr(trossen_arm.InterpolationSpace, interpolation_space)
+    #         self.arm_r.set_cartesian_positions(
+    #             trossen_arm.VectorDouble(goal_positions),
+    #             interp_space,
+    #             goal_time,
+    #             block,
+    #         )
+    #     except Exception as e:
+    #         logger.warning(f"🦾❌ Failed to set right arm cartesian positions: \n{type(e)}:\n{e}")
+
     def _get_error_str_l(self) -> str:
         if self.arm_l is None:
             logger.warning(f"🦾❌ Left arm is not connected.")
@@ -189,6 +237,10 @@ class Tatbot(Robot):
     @property
     def _motors_ft(self) -> dict[str, type]:
         return {f"{joint}.pos": float for joint in self.joints}
+    
+    # @property
+    # def _ee_pose_ft(self) -> dict[str, type]:
+    #     return {dim: float for dim in ["x", "y", "z", "qw", "qx", "qy", "qz"]}
 
     @property
     def _cameras_ft(self) -> dict[str, tuple]:
@@ -203,6 +255,7 @@ class Tatbot(Robot):
     @cached_property
     def action_features(self) -> dict[str, type]:
         return self._motors_ft
+        # return {**self._motors_ft, **self._ee_pose_ft}
 
     @property
     def is_connected(self) -> bool:
@@ -342,6 +395,12 @@ class Tatbot(Robot):
                 logger.warning(f"🦾❌ Failed to idle right arm:\n{e}")
 
         for cam in self.cameras.values():
+            try:
+                cam.disconnect()
+            except Exception as e:
+                logger.warning(f"🎥❌ Failed to disconnect from {cam}:\n{e}")
+
+        for cam in self.cond_cameras.values():
             try:
                 cam.disconnect()
             except Exception as e:
