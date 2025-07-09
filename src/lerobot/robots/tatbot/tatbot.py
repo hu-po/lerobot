@@ -272,11 +272,6 @@ class Tatbot(Robot):
                 cam.connect()
             except Exception as e:
                 logger.warning(f"🎥❌Failed to connect to camera: {cam}: \n{e}")
-        for cam in self.cond_cameras.values():
-            try:
-                cam.connect()
-            except Exception as e:
-                logger.warning(f"🎥❌Failed to connect to conditioning camera: {cam}: \n{e}")
         self._connect_l()
         self._connect_r()
         self.configure()
@@ -359,7 +354,14 @@ class Tatbot(Robot):
 
     def get_conditioning(self) -> dict[str, Any]:
         logger.debug(f"🤖🎥 {self} performing conditioning...")
+        # connect conditioning cameras
+        for cam in self.cond_cameras.values():
+            try:
+                cam.connect()
+            except Exception as e:
+                logger.warning(f"🎥❌Failed to connect to conditioning camera: {cam}: \n{e}")
         obs_dict = {}
+        # read conditioning cameras
         for cam_key, cam in self.cond_cameras.items():
             start = time.perf_counter()
             try:
@@ -369,6 +371,22 @@ class Tatbot(Robot):
                 obs_dict[cam_key] = np.zeros((cam.height, cam.width, 3), dtype=np.uint8)
             dt_ms = (time.perf_counter() - start) * 1e3
             logger.debug(f"{self} read {cam_key}: {dt_ms:.1f}ms")
+        # also add normal cameras to conditioning information
+        for cam_key, cam in self.cameras.items():
+            start = time.perf_counter()
+            try:
+                obs_dict[cam_key] = cam.async_read()
+            except Exception as e:
+                logger.warning(f"❌🎥 Failed to read {cam_key}:\n{e}")
+                obs_dict[cam_key] = np.zeros((cam.height, cam.width, 3), dtype=np.uint8)
+            dt_ms = (time.perf_counter() - start) * 1e3
+            logger.debug(f"{self} read {cam_key}: {dt_ms:.1f}ms")
+        # disconnect conditioning cameras
+        for cam in self.cond_cameras.values():
+            try:
+                cam.disconnect()
+            except Exception as e:
+                logger.warning(f"🎥❌ Failed to disconnect from {cam}:\n{e}")
         return obs_dict
 
     def disconnect(self):
