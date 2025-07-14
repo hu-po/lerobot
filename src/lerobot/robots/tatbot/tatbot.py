@@ -230,7 +230,7 @@ class Tatbot(Robot):
         return obs_dict
 
     def _urdf_joints_to_action(self, urdf_joints: list[float]) -> dict[str, float]:
-        filtered_joints = urdf_joints[:7] + urdf_joints[8:14]
+        filtered_joints = urdf_joints[:7] + urdf_joints[8:15] # remove redundant gripper joints
         _action = {f"{j}.pos": v for j, v in zip(self.joints, filtered_joints)}
         if logger.isEnabledFor(logging.DEBUG):
             logger.debug(f"🤖 Action: {_action}")
