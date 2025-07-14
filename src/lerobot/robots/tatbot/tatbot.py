@@ -230,10 +230,7 @@ class Tatbot(Robot):
         return obs_dict
 
     def _urdf_joints_to_action(self, urdf_joints: list[float]) -> dict[str, float]:
-        assert len(urdf_joints) >= 15, "URDF joints must have at least 15 elements"
-        # Skip index 7: unused base joint
-        filtered_joints = urdf_joints[:7] + urdf_joints[8:]
-        assert len(filtered_joints) == len(self.joints) == 14, f"Expected 14 joints, got {len(filtered_joints)}"
+        filtered_joints = urdf_joints[:7] + urdf_joints[8:14]
         _action = {f"{j}.pos": v for j, v in zip(self.joints, filtered_joints)}
         if logger.isEnabledFor(logging.DEBUG):
             logger.debug(f"🤖 Action: {_action}")
