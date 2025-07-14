@@ -4,8 +4,11 @@ import evdev
 from evdev import InputDevice, ecodes
 import threading
 import queue as thread_queue
+import logging
 from ..teleoperator import Teleoperator
 from ..config import TeleoperatorConfig
+
+logger = logging.getLogger(__name__)
 
 ATARI_NAME = "Retro Games LTD  Atari CX Wireless Controller"
 RED_BUTTON_CODE = 304  # Detected from debug logs
@@ -15,7 +18,7 @@ RED_BUTTON_CODE = 304  # Detected from debug logs
 class AtariTeleoperatorConfig(TeleoperatorConfig):
     device_name: str = ATARI_NAME
     axis_threshold: float = 0.5
-    queue_size: int = 1
+    queue_size: int = 0  # Unbounded queue to avoid silent drops
 
 class AtariTeleoperator(Teleoperator):
     config_class = AtariTeleoperatorConfig
@@ -30,6 +33,7 @@ class AtariTeleoperator(Teleoperator):
         self._stop_event = threading.Event()
         self._last_axis = {'x': None, 'y': None}
         self._connected = False
+        self._queue_full_count = 0  # Track queue full occurrences
 
     @property
     def action_features(self) -> dict:
@@ -83,7 +87,7 @@ class AtariTeleoperator(Teleoperator):
                     elif event.code == ecodes.ABS_Y:
                         axis = 'y'
                     if axis:
-                        norm = (event.value - 0) / (255 - 0) * 2 - 1
+                        norm = event.value / 127.5 - 1.0
                         last = self._last_axis[axis]
                         if last is None or abs(norm - last) > self.config.axis_threshold:
                             self._last_axis[axis] = norm
@@ -95,14 +99,18 @@ class AtariTeleoperator(Teleoperator):
         try:
             self._queue.put_nowait(event)
         except thread_queue.Full:
-            pass
+            self._queue_full_count += 1
+            if self._queue_full_count % 10 == 0:  # Log every 10th occurrence to avoid spam
+                logger.warning(f"Atari teleoperator queue full {self._queue_full_count} times - input lag detected")
 
     def get_action(self) -> dict[str, Any]:
-        # Aggregate all available events into a single action dict
+        # Drain the queue and keep only the last event to avoid silent drops
         action = {"x": 0.0, "y": 0.0, "red_button": False}
+        last_event = None
         while not self._queue.empty():
-            evt = self._queue.get_nowait()
-            action.update(evt)
+            last_event = self._queue.get_nowait()
+        if last_event:
+            action.update(last_event)
         return action
 
     @property

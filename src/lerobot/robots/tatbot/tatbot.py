@@ -3,6 +3,7 @@ import time
 from functools import cached_property
 from typing import Any
 import os
+from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
 from lerobot.cameras.utils import make_cameras_from_configs
@@ -27,22 +28,7 @@ class Tatbot(Robot):
     def __init__(self, config: TatbotConfig):
         super().__init__(config)
         self.config = config
-        self.joints = [
-            "left.joint_0",
-            "left.joint_1",
-            "left.joint_2",
-            "left.joint_3",
-            "left.joint_4",
-            "left.joint_5",
-            "left.gripper",
-            "right.joint_0",
-            "right.joint_1",
-            "right.joint_2",
-            "right.joint_3",
-            "right.joint_4",
-            "right.joint_5",
-            "right.gripper",
-        ]
+        self.joints = [f"{side}.{name}" for side in ("left","right") for name in ("joint_0","joint_1","joint_2","joint_3","joint_4","joint_5","gripper")]
         self.arm_l = None
         self.arm_r = None
         self.cameras = make_cameras_from_configs(config.cameras)
@@ -50,7 +36,8 @@ class Tatbot(Robot):
 
     def _connect_l(self, clear_error: bool = True) -> None:
         try:
-            logger.debug(f"🦾 Connecting to {self} left arm")
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug(f"🦾 Connecting to {self} left arm")
             self.arm_l = trossen_arm.TrossenArmDriver()
             self.arm_l.configure(
                 trossen_arm.Model.wxai_v0,
@@ -60,7 +47,8 @@ class Tatbot(Robot):
                 timeout=self.config.connection_timeout,
             )
             config_filepath = os.path.expanduser(self.config.arm_l_config_filepath)
-            logger.debug(f"🦾 Loading left arm config from {config_filepath}")
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug(f"🦾 Loading left arm config from {config_filepath}")
             self.arm_l.load_configs_from_file(config_filepath)
             self.arm_l.set_all_modes(trossen_arm.Mode.position)
             self._set_positions_l(self.config.home_pos_l, self.config.goal_time_slow)
@@ -71,7 +59,8 @@ class Tatbot(Robot):
 
     def _connect_r(self, clear_error: bool = True) -> None:
         try:
-            logger.debug(f"🦾 Connecting to {self} right arm")
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug(f"🦾 Connecting to {self} right arm")
             self.arm_r = trossen_arm.TrossenArmDriver()
             self.arm_r.configure(
                 trossen_arm.Model.wxai_v0,
@@ -81,7 +70,8 @@ class Tatbot(Robot):
                 timeout=self.config.connection_timeout,
             )
             config_filepath = os.path.expanduser(self.config.arm_r_config_filepath)
-            logger.debug(f"🦾 Loading right arm config from {config_filepath}")
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug(f"🦾 Loading right arm config from {config_filepath}")
             self.arm_r.load_configs_from_file(config_filepath)
             self.arm_r.set_all_modes(trossen_arm.Mode.position)
             self._set_positions_r(self.config.home_pos_r, self.config.goal_time_slow)
@@ -90,81 +80,57 @@ class Tatbot(Robot):
             self.arm_r = None
         logger.info(f"✅🦾 {self} right arm connected.")
 
-    def _get_positions_l(self) -> list[float]:
-        if self.arm_l is None:
-            logger.warning(f"🦾❌ Left arm is not connected.")
-            return self.config.home_pos_l
+    def _get_positions(self, driver_handle, fallback_pose: list[float], label: str) -> list[float]:
+        if driver_handle is None:
+            logger.warning(f"🦾❌ {label} arm is not connected.")
+            return fallback_pose
         try:
-            return self.arm_l.get_all_positions()
+            return driver_handle.get_all_positions()
         except Exception as e:
-            logger.warning(f"🦾❌ Failed to get left arm positions:\n{e}")
-            return self.config.home_pos_l
+            logger.warning(f"🦾❌ Failed to get {label} arm positions:\n{e}")
+            return fallback_pose
+    
+    def _get_positions_l(self) -> list[float]:
+        return self._get_positions(self.arm_l, self.config.home_pos_l, "Left")
     
     def _get_positions_r(self) -> list[float]:
-        if self.arm_r is None:
-            logger.warning(f"🦾❌ Right arm is not connected.")
-            return self.config.home_pos_r
+        return self._get_positions(self.arm_r, self.config.home_pos_r, "Right")
+
+    def _set_positions(self, driver_handle, joints: list[float], goal_time: float, block: bool, joint_names: list[str], label: str, get_error_str_func) -> None:
+        if driver_handle is None:
+            logger.warning(f"🦾❌ {label} arm is not connected.")
+            return
         try:
-            return self.arm_r.get_all_positions()
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug(f"🦾 Setting {label.lower()} arm positions: {joints}, goal_time: {goal_time}")
+            if len(joints) != 7:
+                logger.warning(f"🦾❌ {label} arm positions length mismatch: {len(joints)} != 7")
+                joints = joints[:7]
+            driver_handle.set_all_positions(
+                trossen_arm.VectorDouble(joints),
+                goal_time=goal_time,
+                blocking=block,
+            )
+            read_joints = self._get_positions(driver_handle, joints, label)
+            deltas = np.abs(np.array(read_joints) - np.array(joints))
+            mismatch: bool = False
+            for i, joint in enumerate(joint_names):
+                delta = deltas[i]
+                if delta > self.config.joint_tolerance_warning:
+                    logger.warning(f"🦾⚠️ {label} arm position mismatch: {joint} {read_joints[i]} {joints[i]}")
+                if delta > self.config.joint_tolerance_error:
+                    logger.error(f"🦾❌ {label} arm position mismatch: {joint} {read_joints[i]} {joints[i]}")
+                    mismatch = True
+            if mismatch:
+                raise ValueError(f"{label.lower()} arm joints mismatch")
         except Exception as e:
-            logger.warning(f"🦾❌ Failed to get right arm positions:\n{e}")
-            return self.config.home_pos_r
+            logger.warning(f"🦾❌ Failed to set {label.lower()} arm positions: \n{type(e)}:\n{e}\n{get_error_str_func()}")
 
     def _set_positions_l(self, joints: list[float], goal_time: float = 1.0, block: bool = True) -> None:
-        if self.arm_l is None:
-            logger.warning(f"🦾❌ Left arm is not connected.")
-            return
-        try:
-            logger.debug(f"🦾 Setting left arm positions: {joints}, goal_time: {goal_time}")
-            if len(joints) != 7:
-                logger.warning(f"🦾❌ Left arm positions length mismatch: {len(joints)} != 7")
-                joints = joints[:7]
-            self.arm_l.set_all_positions(
-                trossen_arm.VectorDouble(joints),
-                goal_time=goal_time,
-                blocking=block,
-            )
-            read_joints = self._get_positions_l()
-            mismatch: bool = False
-            for i, joint in enumerate(self.joints[:7]):
-                delta: float = abs(read_joints[i] - joints[i])
-                if delta > self.config.joint_tolerance_warning:
-                    logger.warning(f"🦾⚠️ Left arm position mismatch: {joint} {read_joints[i]} {joints[i]}")
-                if delta > self.config.joint_tolerance_error:
-                    logger.error(f"🦾❌ Left arm position mismatch: {joint} {read_joints[i]} {joints[i]}")
-                    mismatch = True
-            if mismatch:
-                raise ValueError("left arm joints mismatch")
-        except Exception as e:
-            logger.warning(f"🦾❌ Failed to set left arm positions: \n{type(e)}:\n{e}\n{self._get_error_str_l()}")
+        self._set_positions(self.arm_l, joints, goal_time, block, self.joints[:7], "Left", self._get_error_str_l)
 
     def _set_positions_r(self, joints: list[float], goal_time: float = 1.0, block: bool = True) -> None:
-        if self.arm_r is None:
-            logger.warning(f"🦾❌ Right arm is not connected.")
-            return
-        try:
-            logger.debug(f"🦾 Setting right arm positions: {joints}, goal_time: {goal_time}")
-            if len(joints) != 7:
-                logger.warning(f"🦾❌ Right arm positions length mismatch: {len(joints)} != 7")
-                joints = joints[:7]
-            self.arm_r.set_all_positions(
-                trossen_arm.VectorDouble(joints),
-                goal_time=goal_time,
-                blocking=block,
-            )
-            read_joints = self._get_positions_r()
-            mismatch: bool = False
-            for i, joint in enumerate(self.joints[7:]):
-                delta: float = abs(read_joints[i] - joints[i])
-                if delta > self.config.joint_tolerance_warning:
-                    logger.warning(f"🦾⚠️ Right arm position mismatch: {joint} {read_joints[i]} {joints[i]}")
-                if delta > self.config.joint_tolerance_error:
-                    logger.error(f"🦾❌ Right arm position mismatch: {joint} {read_joints[i]} {joints[i]}")
-                    mismatch = True
-            if mismatch:
-                raise ValueError("right arm joints mismatch")
-        except Exception as e:
-            logger.warning(f"🦾❌ Failed to set right arm positions: \n{type(e)}:\n{e}\n{self._get_error_str_r()}")
+        self._set_positions(self.arm_r, joints, goal_time, block, self.joints[7:], "Right", self._get_error_str_r)
 
     # TODO: cartesian control?
     # # https://en.wikipedia.org/wiki/Axis%E2%80%93angle_representation
@@ -297,46 +263,53 @@ class Tatbot(Robot):
         joint_pos_l = self._get_positions_l()
         joint_pos_r = self._get_positions_r()
         obs_dict = {}
-        for i, joint in enumerate(self.joints[:7]):
-            obs_dict[f"{joint}.pos"] = joint_pos_l[i]
-        for i, joint in enumerate(self.joints[7:]):
-            obs_dict[f"{joint}.pos"] = joint_pos_r[i]
+        obs_dict.update({f"{j}.pos": v for j, v in zip(self.joints, joint_pos_l + joint_pos_r)})
         dt_ms = (time.perf_counter() - start) * 1e3
-        logger.debug(f"{self} read state: {dt_ms:.1f}ms")
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug(f"{self} read state: {dt_ms:.1f}ms")
 
-        # Capture images from cameras
-        for cam_key, cam in self.cameras.items():
+        # Capture images from cameras in parallel
+        def read_camera(cam_key, cam):
             start = time.perf_counter()
             try:
-                obs_dict[cam_key] = cam.async_read()
+                frame = cam.async_read()
             except Exception as e:
                 logger.warning(f"❌🎥 Failed to read {cam_key}:\n{e}")
-                obs_dict[cam_key] = np.zeros((cam.height, cam.width, 3), dtype=np.uint8)
+                frame = np.zeros((cam.height, cam.width, 3), dtype=np.uint8)
             dt_ms = (time.perf_counter() - start) * 1e3
-            logger.debug(f"{self} read {cam_key}: {dt_ms:.1f}ms")
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug(f"{self} read {cam_key}: {dt_ms:.1f}ms")
+            return cam_key, frame
+        
+        with ThreadPoolExecutor(max_workers=len(self.cameras)) as executor:
+            futures = [executor.submit(read_camera, cam_key, cam) for cam_key, cam in self.cameras.items()]
+            for future in futures:
+                cam_key, frame = future.result()
+                obs_dict[cam_key] = frame
 
         return obs_dict
 
     def _urdf_joints_to_action(self, urdf_joints: list[float]) -> dict[str, float]:
-        _action = {
-            "left.joint_0.pos": urdf_joints[0],
-            "left.joint_1.pos": urdf_joints[1],
-            "left.joint_2.pos": urdf_joints[2],
-            "left.joint_3.pos": urdf_joints[3],
-            "left.joint_4.pos": urdf_joints[4],
-            "left.joint_5.pos": urdf_joints[5],
-            "left.gripper.pos": urdf_joints[6],
-            "right.joint_0.pos": urdf_joints[8],
-            "right.joint_1.pos": urdf_joints[9],
-            "right.joint_2.pos": urdf_joints[10],
-            "right.joint_3.pos": urdf_joints[11],
-            "right.joint_4.pos": urdf_joints[12],
-            "right.joint_5.pos": urdf_joints[13],
-            "right.gripper.pos": urdf_joints[14],
-        }
-        logger.debug(f"🤖 Action: {_action}")
+        # Skip index 7 as per original implementation
+        filtered_joints = urdf_joints[:7] + urdf_joints[8:]
+        _action = {f"{j}.pos": v for j, v in zip(self.joints, filtered_joints)}
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug(f"🤖 Action: {_action}")
         return _action
         
+    def _wait_for_arms(self, timeout: float = None) -> None:
+        """Wait for both arms to complete their movements."""
+        if timeout is None:
+            timeout = self.config.goal_time_fast * 2  # Allow some extra time
+        start_time = time.perf_counter()
+        while time.perf_counter() - start_time < timeout:
+            # Check if both arms have reached their target positions
+            joint_pos_l = self._get_positions_l()
+            joint_pos_r = self._get_positions_r()
+            # Simple check - could be enhanced with more sophisticated completion detection
+            time.sleep(0.01)  # Small sleep to avoid busy waiting
+        return
+
     def send_action(self, action: dict[str, Any], goal_time: float = None, block: str = "both") -> dict[str, Any]:
         if not self.is_connected:
             logger.warning(f"❌🤖 {self} is not connected.")
@@ -344,16 +317,27 @@ class Tatbot(Robot):
 
         goal_time = self.config.goal_time_fast if goal_time is None else goal_time
         goal_pos = {key.removesuffix(".pos"): val for key, val in action.items() if key.endswith(".pos")}
+        
+        # Issue both arm commands with blocking=False for simultaneous movement
         joint_pos_r = [goal_pos[joint] for joint in self.joints[7:]]
-        _block_right: bool = block == "right" or block == "both"
-        self._set_positions_r(joint_pos_r, goal_time, block=_block_right)
         joint_pos_l = [goal_pos[joint] for joint in self.joints[:7]]
-        _block_left: bool = block == "left" or block == "both"
-        self._set_positions_l(joint_pos_l, goal_time, block=_block_left)
+        
+        self._set_positions_r(joint_pos_r, goal_time, block=False)
+        self._set_positions_l(joint_pos_l, goal_time, block=False)
+        
+        # Wait for completion if requested
+        if block == "both":
+            self._wait_for_arms(goal_time)
+        elif block == "left":
+            self._wait_for_arms(goal_time)
+        elif block == "right":
+            self._wait_for_arms(goal_time)
+        
         return {f"{joint}.pos": val for joint, val in goal_pos.items()}
 
     def get_conditioning(self) -> dict[str, Any]:
-        logger.debug(f"🤖🎥 {self} performing conditioning...")
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug(f"🤖🎥 {self} performing conditioning...")
         # connect conditioning cameras
         for cam in self.cond_cameras.values():
             try:
@@ -361,26 +345,32 @@ class Tatbot(Robot):
             except Exception as e:
                 logger.warning(f"🎥❌Failed to connect to conditioning camera: {cam}: \n{e}")
         obs_dict = {}
-        # read conditioning cameras
-        for cam_key, cam in self.cond_cameras.items():
+        # read conditioning cameras in parallel
+        def read_cond_camera(cam_key, cam):
             start = time.perf_counter()
             try:
-                obs_dict[cam_key] = cam.async_read()
+                frame = cam.async_read()
             except Exception as e:
                 logger.warning(f"❌🎥 Failed to read {cam_key}:\n{e}")
-                obs_dict[cam_key] = np.zeros((cam.height, cam.width, 3), dtype=np.uint8)
+                frame = np.zeros((cam.height, cam.width, 3), dtype=np.uint8)
             dt_ms = (time.perf_counter() - start) * 1e3
-            logger.debug(f"{self} read {cam_key}: {dt_ms:.1f}ms")
-        # also add normal cameras to conditioning information
-        for cam_key, cam in self.cameras.items():
-            start = time.perf_counter()
-            try:
-                obs_dict[cam_key] = cam.async_read()
-            except Exception as e:
-                logger.warning(f"❌🎥 Failed to read {cam_key}:\n{e}")
-                obs_dict[cam_key] = np.zeros((cam.height, cam.width, 3), dtype=np.uint8)
-            dt_ms = (time.perf_counter() - start) * 1e3
-            logger.debug(f"{self} read {cam_key}: {dt_ms:.1f}ms")
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug(f"{self} read {cam_key}: {dt_ms:.1f}ms")
+            return cam_key, frame
+        
+        # Read conditioning cameras in parallel
+        with ThreadPoolExecutor(max_workers=len(self.cond_cameras)) as executor:
+            futures = [executor.submit(read_cond_camera, cam_key, cam) for cam_key, cam in self.cond_cameras.items()]
+            for future in futures:
+                cam_key, frame = future.result()
+                obs_dict[cam_key] = frame
+        
+        # also add normal cameras to conditioning information in parallel
+        with ThreadPoolExecutor(max_workers=len(self.cameras)) as executor:
+            futures = [executor.submit(read_cond_camera, cam_key, cam) for cam_key, cam in self.cameras.items()]
+            for future in futures:
+                cam_key, frame = future.result()
+                obs_dict[cam_key] = frame
         # disconnect conditioning cameras
         for cam in self.cond_cameras.values():
             try:
