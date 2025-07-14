@@ -97,7 +97,7 @@ class Tatbot(Robot):
     def _get_positions_r(self) -> list[float]:
         return self._get_positions(self.arm_r, self.config.home_pos_r, "Right")
 
-    def _set_positions(self, driver_handle, joints: list[float], goal_time: float, block: bool, joint_names: list[str], label: str, get_error_str_func) -> None:
+    def _set_positions(self, driver_handle, joints: list[float], goal_time: float, block: bool, label: str, get_error_str_func) -> None:
         if driver_handle is None:
             logger.warning(f"🦾❌ {label} arm is not connected.")
             return
@@ -105,8 +105,7 @@ class Tatbot(Robot):
             if logger.isEnabledFor(logging.DEBUG):
                 logger.debug(f"🦾 Setting {label.lower()} arm positions: {joints}, goal_time: {goal_time}")
             if len(joints) != 7:
-                logger.warning(f"🦾❌ {label} arm positions length mismatch: {len(joints)} != 7")
-                joints = joints[:7]
+                raise ValueError(f"🦾❌ {label} arm positions length mismatch: {len(joints)} != 7")
             driver_handle.set_all_positions(
                 trossen_arm.VectorDouble(joints),
                 goal_time=goal_time,
@@ -116,10 +115,10 @@ class Tatbot(Robot):
             logger.warning(f"🦾❌ Failed to set {label.lower()} arm positions: \n{type(e)}:\n{e}\n{get_error_str_func()}")
 
     def _set_positions_l(self, joints: list[float], goal_time: float = 1.0, block: bool = True) -> None:
-        self._set_positions(self.arm_l, joints, goal_time, block, self.joints[:7], "Left", self._get_error_str_l)
+        self._set_positions(self.arm_l, joints, goal_time, block, "Left", self._get_error_str_l)
 
     def _set_positions_r(self, joints: list[float], goal_time: float = 1.0, block: bool = True) -> None:
-        self._set_positions(self.arm_r, joints, goal_time, block, self.joints[7:], "Right", self._get_error_str_r)
+        self._set_positions(self.arm_r, joints, goal_time, block, "Right", self._get_error_str_r)
 
     def _get_error_str_l(self) -> str:
         if self.arm_l is None:
@@ -222,7 +221,7 @@ class Tatbot(Robot):
                 logger.debug(f"{self} read {cam_key}: {dt_ms:.1f}ms")
             return cam_key, frame
         
-        with ThreadPoolExecutor(max_workers=len(self.cameras)) as executor:
+        with ThreadPoolExecutor(max_workers=max(1, len(self.cameras))) as executor:
             futures = [executor.submit(read_camera, cam_key, cam) for cam_key, cam in self.cameras.items()]
             for future in futures:
                 cam_key, frame = future.result()
@@ -250,8 +249,12 @@ class Tatbot(Robot):
             wait_left: Whether to wait for left arm completion
             wait_right: Whether to wait for right arm completion
         """
+        # If validation is disabled, return immediately to avoid unnecessary polling
+        if not self.config.validate_positions:
+            return
+            
         if timeout is None:
-            timeout = self.config.goal_time_fast * 10  # Allow some extra time
+            timeout = self.config.goal_time_fast * 5  # Allow some extra time
         start_time = time.perf_counter()
         
         while time.perf_counter() - start_time < timeout:
@@ -262,18 +265,17 @@ class Tatbot(Robot):
                 joint_pos_r = self._get_positions_r()
             
             # Check completion if validation is enabled and goals provided
-            if self.config.validate_positions:
-                all_complete = True
-                if wait_left and goal_pos_l is not None and self.arm_l is not None:
-                    deltas_l = np.abs(np.array(joint_pos_l) - np.array(goal_pos_l))
-                    if np.any(deltas_l > self.config.joint_tolerance_error):
-                        all_complete = False
-                if wait_right and goal_pos_r is not None and self.arm_r is not None:
-                    deltas_r = np.abs(np.array(joint_pos_r) - np.array(goal_pos_r))
-                    if np.any(deltas_r > self.config.joint_tolerance_error):
-                        all_complete = False
-                if all_complete:
-                    break
+            all_complete = True
+            if wait_left and goal_pos_l is not None and self.arm_l is not None:
+                deltas_l = np.abs(np.array(joint_pos_l) - np.array(goal_pos_l))
+                if np.any(deltas_l > self.config.joint_tolerance_error):
+                    all_complete = False
+            if wait_right and goal_pos_r is not None and self.arm_r is not None:
+                deltas_r = np.abs(np.array(joint_pos_r) - np.array(goal_pos_r))
+                if np.any(deltas_r > self.config.joint_tolerance_error):
+                    all_complete = False
+            if all_complete:
+                break
             
             time.sleep(0.1)  # Increased sleep to reduce busy-wait overhead
         
@@ -282,8 +284,7 @@ class Tatbot(Robot):
             logger.warning(f"🦾⚠️ Arm movement timeout after {timeout:.1f}s")
         
         # Validate positions if enabled
-        if self.config.validate_positions:
-            self._validate_arm_positions(goal_pos_l, goal_pos_r, wait_left, wait_right)
+        self._validate_arm_positions(goal_pos_l, goal_pos_r, wait_left, wait_right)
     
     def _validate_arm_positions(self, goal_pos_l: list[float] = None, goal_pos_r: list[float] = None, validate_left: bool = True, validate_right: bool = True) -> None:
         """Validate arm positions against target positions."""
@@ -374,14 +375,14 @@ class Tatbot(Robot):
             return cam_key, frame
         
         # Read conditioning cameras in parallel
-        with ThreadPoolExecutor(max_workers=len(self.cond_cameras)) as executor:
+        with ThreadPoolExecutor(max_workers=max(1, len(self.cond_cameras))) as executor:
             futures = [executor.submit(read_cond_camera, cam_key, cam) for cam_key, cam in self.cond_cameras.items()]
             for future in futures:
                 cam_key, frame = future.result()
                 obs_dict[cam_key] = frame
         
         # also add normal cameras to conditioning information in parallel
-        with ThreadPoolExecutor(max_workers=len(self.cameras)) as executor:
+        with ThreadPoolExecutor(max_workers=max(1, len(self.cameras))) as executor:
             futures = [executor.submit(read_cond_camera, cam_key, cam) for cam_key, cam in self.cameras.items()]
             for future in futures:
                 cam_key, frame = future.result()

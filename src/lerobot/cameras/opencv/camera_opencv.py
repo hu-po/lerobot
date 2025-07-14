@@ -207,7 +207,9 @@ class OpenCVCamera(Camera):
             logger.debug("IP camera detected, skipping FPS and resolution validation.")
 
         if self.fps is None:
-            self.fps = self.videocapture.get(cv2.CAP_PROP_FPS)
+            # Skip FPS query for IP cameras to avoid stalls
+            if not is_ip_camera:
+                self.fps = self.videocapture.get(cv2.CAP_PROP_FPS)
         elif not is_ip_camera:
             self._validate_fps()
 
