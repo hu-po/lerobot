@@ -86,7 +86,7 @@ class Tatbot(Robot):
             logger.warning(f"🦾❌ {label} arm is not connected.")
             return fallback_pose
         try:
-            return driver_handle.get_all_positions()
+            return list(driver_handle.get_all_positions())
         except Exception as e:
             logger.warning(f"🦾❌ Failed to get {label} arm positions:\n{e}")
             return fallback_pose
@@ -332,7 +332,6 @@ class Tatbot(Robot):
         # Prepare joint positions
         joint_pos_l = [goal_pos[joint] for joint in self.joints[:7]]
         joint_pos_r = [goal_pos[joint] for joint in self.joints[7:]]
-        import pdb; pdb.set_trace()
         
         # Issue both arm commands in parallel using threads
         def set_left_arm():
