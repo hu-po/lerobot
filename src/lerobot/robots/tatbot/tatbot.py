@@ -111,18 +111,6 @@ class Tatbot(Robot):
                 goal_time=goal_time,
                 blocking=block,
             )
-            read_joints = self._get_positions(driver_handle, joints, label)
-            deltas = np.abs(np.array(read_joints) - np.array(joints))
-            mismatch: bool = False
-            for i, joint in enumerate(joint_names):
-                delta = deltas[i]
-                if delta > self.config.joint_tolerance_warning:
-                    logger.warning(f"🦾⚠️ {label} arm position mismatch: {joint} {read_joints[i]} {joints[i]}")
-                if delta > self.config.joint_tolerance_error:
-                    logger.error(f"🦾❌ {label} arm position mismatch: {joint} {read_joints[i]} {joints[i]}")
-                    mismatch = True
-            if mismatch:
-                raise ValueError(f"{label.lower()} arm joints mismatch")
         except Exception as e:
             logger.warning(f"🦾❌ Failed to set {label.lower()} arm positions: \n{type(e)}:\n{e}\n{get_error_str_func()}")
 
@@ -290,25 +278,83 @@ class Tatbot(Robot):
         return obs_dict
 
     def _urdf_joints_to_action(self, urdf_joints: list[float]) -> dict[str, float]:
-        # Skip index 7 as per original implementation
+        assert len(urdf_joints) >= 15, "URDF joints must have at least 15 elements"
+        # Skip index 7: unused base joint
         filtered_joints = urdf_joints[:7] + urdf_joints[8:]
+        assert len(filtered_joints) == len(self.joints) == 14, f"Expected 14 joints, got {len(filtered_joints)}"
         _action = {f"{j}.pos": v for j, v in zip(self.joints, filtered_joints)}
         if logger.isEnabledFor(logging.DEBUG):
             logger.debug(f"🤖 Action: {_action}")
         return _action
         
-    def _wait_for_arms(self, timeout: float = None) -> None:
-        """Wait for both arms to complete their movements."""
+    def _wait_for_arms(self, timeout: float = None, goal_pos_l: list[float] = None, goal_pos_r: list[float] = None, wait_left: bool = True, wait_right: bool = True) -> None:
+        """Wait for arms to complete their movements.
+        
+        Args:
+            timeout: Maximum time to wait. If None, uses goal_time_fast * 10
+            goal_pos_l: Target positions for left arm for validation
+            goal_pos_r: Target positions for right arm for validation  
+            wait_left: Whether to wait for left arm completion
+            wait_right: Whether to wait for right arm completion
+        """
         if timeout is None:
-            timeout = self.config.goal_time_fast * 2  # Allow some extra time
+            timeout = self.config.goal_time_fast * 10  # Allow some extra time
         start_time = time.perf_counter()
+        
         while time.perf_counter() - start_time < timeout:
-            # Check if both arms have reached their target positions
+            # Check if arms have reached their target positions
+            if wait_left and self.arm_l is not None:
+                joint_pos_l = self._get_positions_l()
+            if wait_right and self.arm_r is not None:
+                joint_pos_r = self._get_positions_r()
+            
+            # Check completion if validation is enabled and goals provided
+            if self.config.validate_positions:
+                all_complete = True
+                if wait_left and goal_pos_l is not None and self.arm_l is not None:
+                    deltas_l = np.abs(np.array(joint_pos_l) - np.array(goal_pos_l))
+                    if np.any(deltas_l > self.config.joint_tolerance_error):
+                        all_complete = False
+                if wait_right and goal_pos_r is not None and self.arm_r is not None:
+                    deltas_r = np.abs(np.array(joint_pos_r) - np.array(goal_pos_r))
+                    if np.any(deltas_r > self.config.joint_tolerance_error):
+                        all_complete = False
+                if all_complete:
+                    break
+            
+            time.sleep(0.1)  # Increased sleep to reduce busy-wait overhead
+        
+        # Log warning if timeout reached without completion
+        if time.perf_counter() - start_time >= timeout:
+            logger.warning(f"🦾⚠️ Arm movement timeout after {timeout:.1f}s")
+        
+        # Validate positions if enabled
+        if self.config.validate_positions:
+            self._validate_arm_positions(goal_pos_l, goal_pos_r, wait_left, wait_right)
+    
+    def _validate_arm_positions(self, goal_pos_l: list[float] = None, goal_pos_r: list[float] = None, validate_left: bool = True, validate_right: bool = True) -> None:
+        """Validate arm positions against target positions."""
+        if validate_left and goal_pos_l is not None and self.arm_l is not None:
             joint_pos_l = self._get_positions_l()
+            deltas_l = np.abs(np.array(joint_pos_l) - np.array(goal_pos_l))
+            for i, joint in enumerate(self.joints[:7]):
+                delta = deltas_l[i]
+                if delta > self.config.joint_tolerance_warning:
+                    logger.warning(f"🦾⚠️ Left arm position mismatch: {joint} {joint_pos_l[i]} {goal_pos_l[i]}")
+                if delta > self.config.joint_tolerance_error:
+                    logger.error(f"🦾❌ Left arm position mismatch: {joint} {joint_pos_l[i]} {goal_pos_l[i]}")
+                    raise ValueError("Left arm joints mismatch")
+        
+        if validate_right and goal_pos_r is not None and self.arm_r is not None:
             joint_pos_r = self._get_positions_r()
-            # Simple check - could be enhanced with more sophisticated completion detection
-            time.sleep(0.01)  # Small sleep to avoid busy waiting
-        return
+            deltas_r = np.abs(np.array(joint_pos_r) - np.array(goal_pos_r))
+            for i, joint in enumerate(self.joints[7:]):
+                delta = deltas_r[i]
+                if delta > self.config.joint_tolerance_warning:
+                    logger.warning(f"🦾⚠️ Right arm position mismatch: {joint} {joint_pos_r[i]} {goal_pos_r[i]}")
+                if delta > self.config.joint_tolerance_error:
+                    logger.error(f"🦾❌ Right arm position mismatch: {joint} {joint_pos_r[i]} {goal_pos_r[i]}")
+                    raise ValueError("Right arm joints mismatch")
 
     def send_action(self, action: dict[str, Any], goal_time: float = None, block: str = "both") -> dict[str, Any]:
         if not self.is_connected:
@@ -318,20 +364,36 @@ class Tatbot(Robot):
         goal_time = self.config.goal_time_fast if goal_time is None else goal_time
         goal_pos = {key.removesuffix(".pos"): val for key, val in action.items() if key.endswith(".pos")}
         
-        # Issue both arm commands with blocking=False for simultaneous movement
+        # Prepare joint positions
         joint_pos_r = [goal_pos[joint] for joint in self.joints[7:]]
         joint_pos_l = [goal_pos[joint] for joint in self.joints[:7]]
         
-        self._set_positions_r(joint_pos_r, goal_time, block=False)
-        self._set_positions_l(joint_pos_l, goal_time, block=False)
+        # Issue both arm commands in parallel using threads
+        def set_left_arm():
+            self._set_positions_l(joint_pos_l, goal_time, block=False)
+        
+        def set_right_arm():
+            self._set_positions_r(joint_pos_r, goal_time, block=False)
+        
+        left_thread = threading.Thread(target=set_left_arm)
+        right_thread = threading.Thread(target=set_right_arm)
+        
+        left_thread.start()
+        right_thread.start()
+        left_thread.join()
+        right_thread.join()
         
         # Wait for completion if requested
-        if block == "both":
-            self._wait_for_arms(goal_time)
-        elif block == "left":
-            self._wait_for_arms(goal_time)
-        elif block == "right":
-            self._wait_for_arms(goal_time)
+        if block != "none":
+            wait_left = block in ["both", "left"]
+            wait_right = block in ["both", "right"]
+            self._wait_for_arms(
+                goal_time, 
+                goal_pos_l=joint_pos_l if wait_left else None,
+                goal_pos_r=joint_pos_r if wait_right else None,
+                wait_left=wait_left,
+                wait_right=wait_right
+            )
         
         return {f"{joint}.pos": val for joint, val in goal_pos.items()}
 

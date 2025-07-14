@@ -33,7 +33,6 @@ class AtariTeleoperator(Teleoperator):
         self._stop_event = threading.Event()
         self._last_axis = {'x': None, 'y': None}
         self._connected = False
-        self._queue_full_count = 0  # Track queue full occurrences
 
     @property
     def action_features(self) -> dict:
@@ -96,21 +95,14 @@ class AtariTeleoperator(Teleoperator):
             pass
 
     def _put_event(self, event):
-        try:
-            self._queue.put_nowait(event)
-        except thread_queue.Full:
-            self._queue_full_count += 1
-            if self._queue_full_count % 10 == 0:  # Log every 10th occurrence to avoid spam
-                logger.warning(f"Atari teleoperator queue full {self._queue_full_count} times - input lag detected")
+        self._queue.put_nowait(event)
 
     def get_action(self) -> dict[str, Any]:
-        # Drain the queue and keep only the last event to avoid silent drops
+        # Drain the queue and aggregate all events to capture all inputs
         action = {"x": 0.0, "y": 0.0, "red_button": False}
-        last_event = None
         while not self._queue.empty():
-            last_event = self._queue.get_nowait()
-        if last_event:
-            action.update(last_event)
+            evt = self._queue.get_nowait()
+            action.update(evt)
         return action
 
     @property
