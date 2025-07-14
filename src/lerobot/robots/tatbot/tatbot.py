@@ -4,6 +4,7 @@ from functools import cached_property
 from typing import Any
 import os
 from concurrent.futures import ThreadPoolExecutor
+import threading
 
 import numpy as np
 from lerobot.cameras.utils import make_cameras_from_configs
@@ -119,54 +120,6 @@ class Tatbot(Robot):
 
     def _set_positions_r(self, joints: list[float], goal_time: float = 1.0, block: bool = True) -> None:
         self._set_positions(self.arm_r, joints, goal_time, block, self.joints[7:], "Right", self._get_error_str_r)
-
-    # TODO: cartesian control?
-    # # https://en.wikipedia.org/wiki/Axis%E2%80%93angle_representation
-    # # https://docs.trossenrobotics.com/trossen_arm/main/api/classtrossen__arm_1_1TrossenArmDriver.html
-    # def _set_cartesian_l(
-    #     self,
-    #     goal_positions: list[float],
-    #     interpolation_space: str = "cartesian",
-    #     goal_time: float = 2.0,
-    #     block: bool = True,
-    # ) -> None:
-    #     if self.arm_l is None:
-    #         logger.warning("🦾❌ Left arm is not connected.")
-    #         return
-    #     try:
-    #         from scipy.spatial.transform import Rotation as R
-    #         rotvec = R.from_quat([goal_positions[3], goal_positions[4], goal_positions[5], goal_positions[6]]).as_rotvec()
-    #         goal_positions[3:] = rotvec
-    #         interp_space = getattr(trossen_arm.InterpolationSpace, interpolation_space)
-    #         self.arm_l.set_cartesian_positions(
-    #             trossen_arm.VectorDouble(goal_positions),
-    #             interp_space,
-    #             goal_time,
-    #             block,
-    #         )
-    #     except Exception as e:
-    #         logger.warning(f"🦾❌ Failed to set left arm cartesian positions: \n{type(e)}:\n{e}")
-
-    # def _set_cartesian_r(
-    #     self,
-    #     goal_positions: list[float],
-    #     interpolation_space: str = "cartesian",
-    #     goal_time: float = 2.0,
-    #     block: bool = True,
-    # ) -> None:
-    #     if self.arm_r is None:
-    #         logger.warning("🦾❌ Right arm is not connected.")
-    #         return
-    #     try:
-    #         interp_space = getattr(trossen_arm.InterpolationSpace, interpolation_space)
-    #         self.arm_r.set_cartesian_positions(
-    #             trossen_arm.VectorDouble(goal_positions),
-    #             interp_space,
-    #             goal_time,
-    #             block,
-    #         )
-    #     except Exception as e:
-    #         logger.warning(f"🦾❌ Failed to set right arm cartesian positions: \n{type(e)}:\n{e}")
 
     def _get_error_str_l(self) -> str:
         if self.arm_l is None:
