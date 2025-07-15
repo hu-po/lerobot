@@ -40,3 +40,5 @@ class TatbotConfig(RobotConfig):
     """Warning tolerance for joint position mismatch."""
     joint_tolerance_error: float = 1.0
     """Error tolerance for joint position error."""
+    validate_positions: bool = False
+    """Whether to validate joint positions after movement completion."""

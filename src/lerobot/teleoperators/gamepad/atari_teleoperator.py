@@ -4,8 +4,11 @@ import evdev
 from evdev import InputDevice, ecodes
 import threading
 import queue as thread_queue
+import logging
 from ..teleoperator import Teleoperator
 from ..config import TeleoperatorConfig
+
+logger = logging.getLogger(__name__)
 
 ATARI_NAME = "Retro Games LTD  Atari CX Wireless Controller"
 RED_BUTTON_CODE = 304  # Detected from debug logs
@@ -15,7 +18,7 @@ RED_BUTTON_CODE = 304  # Detected from debug logs
 class AtariTeleoperatorConfig(TeleoperatorConfig):
     device_name: str = ATARI_NAME
     axis_threshold: float = 0.5
-    queue_size: int = 1
+    queue_size: int = 0  # Unbounded queue to avoid silent drops
 
 class AtariTeleoperator(Teleoperator):
     config_class = AtariTeleoperatorConfig
@@ -83,22 +86,33 @@ class AtariTeleoperator(Teleoperator):
                     elif event.code == ecodes.ABS_Y:
                         axis = 'y'
                     if axis:
-                        norm = (event.value - 0) / (255 - 0) * 2 - 1
+                        # Use device introspection for robust axis normalization
+                        try:
+                            absinfo = self.device.absinfo(event.code)
+                            if absinfo and absinfo.max != absinfo.min:
+                                norm = (event.value - absinfo.min) / (absinfo.max - absinfo.min) * 2 - 1
+                            else:
+                                # Fallback to hard-coded formula if absinfo is missing or invalid
+                                norm = event.value / 127.5 - 1.0
+                        except (AttributeError, OSError):
+                            # Fallback to hard-coded formula if absinfo fails
+                            norm = event.value / 127.5 - 1.0
+                        
                         last = self._last_axis[axis]
                         if last is None or abs(norm - last) > self.config.axis_threshold:
                             self._last_axis[axis] = norm
                             self._put_event({axis: norm})
-        except Exception:
-            pass
+        except Exception as e:
+            logger.exception("Joystick loop error: %s", e)
 
     def _put_event(self, event):
-        try:
-            self._queue.put_nowait(event)
-        except thread_queue.Full:
-            pass
+        # Check queue size and warn if it's getting too large
+        if self._queue.qsize() > 1000:
+            logger.warning(f"Atari teleoperator queue size is {self._queue.qsize()}, consider processing events faster")
+        self._queue.put_nowait(event)
 
     def get_action(self) -> dict[str, Any]:
-        # Aggregate all available events into a single action dict
+        # Drain the queue and aggregate all events to capture all inputs
         action = {"x": 0.0, "y": 0.0, "red_button": False}
         while not self._queue.empty():
             evt = self._queue.get_nowait()
