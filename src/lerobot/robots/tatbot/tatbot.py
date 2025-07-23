@@ -3,12 +3,10 @@ import time
 from functools import cached_property
 from typing import Any
 import os
-from concurrent.futures import ThreadPoolExecutor
 import threading
 
 import numpy as np
 from lerobot.cameras.utils import make_cameras_from_configs
-# from lerobot.errors import DeviceAlreadyConnectedError, DeviceNotConnectedError
 
 import trossen_arm
 
@@ -32,8 +30,8 @@ class Tatbot(Robot):
         self.joints = [f"{side}.{name}" for side in ("left","right") for name in ("joint_0","joint_1","joint_2","joint_3","joint_4","joint_5","gripper")]
         self.arm_l = None
         self.arm_r = None
-        self.cameras = make_cameras_from_configs(config.cameras)
-        self.cond_cameras = make_cameras_from_configs(config.cond_cameras)
+        self.rs_cameras = make_cameras_from_configs(config.rs_cameras)
+        self.ip_cameras = make_cameras_from_configs(config.ip_cameras)
 
     def _connect_l(self, clear_error: bool = True) -> None:
         try:
@@ -143,16 +141,15 @@ class Tatbot(Robot):
     @property
     def _motors_ft(self) -> dict[str, type]:
         return {f"{joint}.pos": float for joint in self.joints}
-    
-    # @property
-    # def _ee_pose_ft(self) -> dict[str, type]:
-    #     return {dim: float for dim in ["x", "y", "z", "qw", "qx", "qy", "qz"]}
 
     @property
     def _cameras_ft(self) -> dict[str, tuple]:
-        return {
-            cam: (self.config.cameras[cam].height, self.config.cameras[cam].width, 3) for cam in self.cameras
-        }
+        _ft = {}
+        for cam_name in self.rs_cameras.keys():
+            _ft[cam_name] = (self.config.rs_cameras[cam_name].height, self.config.rs_cameras[cam_name].width, 3)
+        for cam_name in self.ip_cameras.keys():
+            _ft[cam_name] = (self.config.ip_cameras[cam_name].height, self.config.ip_cameras[cam_name].width, 3)
+        return _ft
 
     @cached_property
     def observation_features(self) -> dict[str, type | tuple]:
@@ -161,19 +158,25 @@ class Tatbot(Robot):
     @cached_property
     def action_features(self) -> dict[str, type]:
         return self._motors_ft
-        # return {**self._motors_ft, **self._ee_pose_ft}
 
     @property
     def is_connected(self) -> bool:
-        return self.arm_l is not None and self.arm_r is not None and all(cam.is_connected for cam in self.cameras.values())
+        return self.arm_l is not None and \
+            self.arm_r is not None and \
+            all(cam.is_connected for cam in self.rs_cameras.values()) and \
+            all(cam.is_connected for cam in self.ip_cameras.values())
 
     def connect(self, calibrate: bool = True) -> None:
         if self.is_connected:
             logger.info(f"✅🤖 {self} already connected.")
             return
-            # raise DeviceAlreadyConnectedError(f"❌🤖 {self} already connected")
 
-        for cam in self.cameras.values():
+        for cam in self.rs_cameras.values():
+            try:
+                cam.connect()
+            except Exception as e:
+                logger.warning(f"🎥❌Failed to connect to camera: {cam}: \n{e}")
+        for cam in self.ip_cameras.values():
             try:
                 cam.connect()
             except Exception as e:
@@ -196,7 +199,6 @@ class Tatbot(Robot):
     def get_observation(self) -> dict[str, Any]:
         if not self.is_connected:
             logger.warning(f"❌🤖 {self} is not connected.")
-            # raise DeviceNotConnectedError(f"{self} is not connected.")
 
         # Read arm position
         start = time.perf_counter()
@@ -208,8 +210,8 @@ class Tatbot(Robot):
         if logger.isEnabledFor(logging.DEBUG):
             logger.debug(f"{self} read state: {dt_ms:.1f}ms")
 
-        # Capture images from cameras in parallel
-        def read_camera(cam_key, cam):
+        # Capture images from rs cameras
+        for cam_key, cam in self.rs_cameras.items():
             start = time.perf_counter()
             try:
                 frame = cam.async_read()
@@ -219,14 +221,25 @@ class Tatbot(Robot):
             dt_ms = (time.perf_counter() - start) * 1e3
             if logger.isEnabledFor(logging.DEBUG):
                 logger.debug(f"{self} read {cam_key}: {dt_ms:.1f}ms")
-            return cam_key, frame
-        
-        with ThreadPoolExecutor(max_workers=max(1, len(self.cameras))) as executor:
-            futures = [executor.submit(read_camera, cam_key, cam) for cam_key, cam in self.cameras.items()]
-            for future in futures:
-                cam_key, frame = future.result()
-                obs_dict[cam_key] = frame
+            obs_dict[cam_key] = frame
 
+        return obs_dict
+    
+    def get_observation_full(self) -> dict[str, Any]:
+        obs_dict = self.get_observation()
+
+        # Capture images from ip cameras
+        for cam_key, cam in self.ip_cameras.items():
+            start = time.perf_counter()
+            try:
+                frame = cam.async_read()
+            except Exception as e:
+                logger.warning(f"❌🎥 Failed to read {cam_key}:\n{e}")
+                frame = np.zeros((cam.height, cam.width, 3), dtype=np.uint8)
+            dt_ms = (time.perf_counter() - start) * 1e3
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug(f"{self} read {cam_key}: {dt_ms:.1f}ms")
+            obs_dict[cam_key] = frame
         return obs_dict
 
     def _urdf_joints_to_action(self, urdf_joints: list[float]) -> dict[str, float]:
@@ -362,80 +375,37 @@ class Tatbot(Robot):
         
         return {f"{joint}.pos": val for joint, val in goal_pos.items()}
 
-    def get_conditioning(self) -> dict[str, Any]:
-        if logger.isEnabledFor(logging.DEBUG):
-            logger.debug(f"🤖🎥 {self} performing conditioning...")
-        # connect conditioning cameras
-        for cam in self.cond_cameras.values():
-            try:
-                cam.connect()
-            except Exception as e:
-                logger.warning(f"🎥❌Failed to connect to conditioning camera: {cam}: \n{e}")
-        obs_dict = {}
-        # read conditioning cameras in parallel
-        def read_cond_camera(cam_key, cam):
-            start = time.perf_counter()
-            try:
-                frame = cam.async_read()
-            except Exception as e:
-                logger.warning(f"❌🎥 Failed to read {cam_key}:\n{e}")
-                frame = np.zeros((cam.height, cam.width, 3), dtype=np.uint8)
-            dt_ms = (time.perf_counter() - start) * 1e3
-            if logger.isEnabledFor(logging.DEBUG):
-                logger.debug(f"{self} read {cam_key}: {dt_ms:.1f}ms")
-            return cam_key, frame
-        
-        # Read conditioning cameras in parallel
-        with ThreadPoolExecutor(max_workers=max(1, len(self.cond_cameras))) as executor:
-            futures = [executor.submit(read_cond_camera, cam_key, cam) for cam_key, cam in self.cond_cameras.items()]
-            for future in futures:
-                cam_key, frame = future.result()
-                obs_dict[cam_key] = frame
-        
-        # also add normal cameras to conditioning information in parallel
-        with ThreadPoolExecutor(max_workers=max(1, len(self.cameras))) as executor:
-            futures = [executor.submit(read_cond_camera, cam_key, cam) for cam_key, cam in self.cameras.items()]
-            for future in futures:
-                cam_key, frame = future.result()
-                obs_dict[cam_key] = frame
-        # disconnect conditioning cameras
-        for cam in self.cond_cameras.values():
-            try:
-                cam.disconnect()
-            except Exception as e:
-                logger.warning(f"🎥❌ Failed to disconnect from {cam}:\n{e}")
-        return obs_dict
-
     def disconnect(self):
         if not self.is_connected:
             logger.warning(f"❌🤖 {self} is not connected.")
-            # raise DeviceNotConnectedError(f"{self} is not connected.")
 
-        logger.info(f"🤖 {self} going to home position.")
-        self._set_positions_l(self.config.home_pos_l, goal_time=self.config.goal_time_slow)
-        self._set_positions_r(self.config.home_pos_r, goal_time=self.config.goal_time_slow)
+        # first try and get the error strings
+        self._connect_l(clear_error=False)
+        logger.error(self._get_error_str_l())
+        self._connect_r(clear_error=False)
+        logger.error(self._get_error_str_r())
 
-        if self.arm_l is not None:
-            try:
-                self.arm_l.set_all_modes(trossen_arm.Mode.idle)
-                logger.info(f"✅🦾 left arm idle.")
-            except Exception as e:
-                logger.warning(f"🦾❌ Failed to idle left arm:\n{e}")
+        # then clear errors and go to home positions
+        logger.info(f"🤖 {self} left arm going to home position.")
+        self._connect_l()
+        self._set_positions_l(self.config.home_pos_l, goal_time=self.config.goal_time_fast)
+        self.arm_l.set_all_modes(trossen_arm.Mode.idle)
+        logger.info(f"✅🦾 {self} left arm idle.")
 
-        if self.arm_r is not None:
-            try:
-                self.arm_r.set_all_modes(trossen_arm.Mode.idle)
-                logger.info(f"✅🦾 right arm idle.")
-            except Exception as e:
-                logger.warning(f"🦾❌ Failed to idle right arm:\n{e}")
+        logger.info(f"🤖 {self} right arm going to home position.")
+        self._connect_r()
+        self._set_positions_r(self.config.home_pos_r, goal_time=self.config.goal_time_fast)
+        self.arm_r.set_all_modes(trossen_arm.Mode.idle)
+        logger.info(f"✅🦾 {self} right arm idle.")
 
-        for cam in self.cameras.values():
+        # disconnect cameras
+        for cam in self.rs_cameras.values():
             try:
                 cam.disconnect()
             except Exception as e:
                 logger.warning(f"🎥❌ Failed to disconnect from {cam}:\n{e}")
 
-        for cam in self.cond_cameras.values():
+        for cam in self.ip_cameras.values():
             try:
                 cam.disconnect()
             except Exception as e:

@@ -9,10 +9,10 @@ from ..config import RobotConfig
 @dataclass
 class TatbotConfig(RobotConfig):
 
-    cameras: dict[str, CameraConfig]
-    """Cameras are used at every timestep."""
-    cond_cameras: dict[str, CameraConfig]
-    """Conditioning cameras are used at the start and end of an episode"""
+    rs_cameras: dict[str, CameraConfig]
+    """Realsense cameras (used at every timestep)."""
+    ip_cameras: dict[str, CameraConfig]
+    """PoE IP Cameras (used sparingly since slow)"""
     
     ip_address_l: str
     """IP address of the left robot arm."""
