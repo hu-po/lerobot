@@ -84,7 +84,7 @@ class Tatbot(Robot):
             logger.warning(f"🦾❌ {label} arm is not connected.")
             return fallback_pose
         try:
-            return list(driver_handle.get_all_positions())
+            return list(driver_handle.get_all_positions()[:7])
         except Exception as e:
             logger.warning(f"🦾❌ Failed to get {label} arm positions:\n{e}")
             return fallback_pose
@@ -243,22 +243,7 @@ class Tatbot(Robot):
         return obs_dict
 
     def _urdf_joints_to_action(self, urdf_joints: list[float]) -> dict[str, float]:
-        _action = {
-            "left.joint_0.pos": urdf_joints[0],
-            "left.joint_1.pos": urdf_joints[1],
-            "left.joint_2.pos": urdf_joints[2],
-            "left.joint_3.pos": urdf_joints[3],
-            "left.joint_4.pos": urdf_joints[4],
-            "left.joint_5.pos": urdf_joints[5],
-            "left.gripper.pos": urdf_joints[6],
-            "right.joint_0.pos": urdf_joints[8],
-            "right.joint_1.pos": urdf_joints[9],
-            "right.joint_2.pos": urdf_joints[10],
-            "right.joint_3.pos": urdf_joints[11],
-            "right.joint_4.pos": urdf_joints[12],
-            "right.joint_5.pos": urdf_joints[13],
-            "right.gripper.pos": urdf_joints[14],
-        }
+        _action = {f"{joint}.pos": urdf_joints[i] for i, joint in enumerate(self.joints)}
         if logger.isEnabledFor(logging.DEBUG):
             logger.debug(f"🤖 Action: {_action}")
         return _action
@@ -315,7 +300,7 @@ class Tatbot(Robot):
         if validate_left and goal_pos_l is not None and self.arm_l is not None:
             joint_pos_l = self._get_positions_l()
             deltas_l = np.abs(np.array(joint_pos_l) - np.array(goal_pos_l))
-            for i, joint in enumerate(self.joints[:7]):
+            for i, joint in enumerate(self.joints):
                 delta = deltas_l[i]
                 if delta > self.config.joint_tolerance_warning:
                     logger.warning(f"🦾⚠️ Left arm position mismatch: {joint} {joint_pos_l[i]} {goal_pos_l[i]}")
@@ -326,7 +311,7 @@ class Tatbot(Robot):
         if validate_right and goal_pos_r is not None and self.arm_r is not None:
             joint_pos_r = self._get_positions_r()
             deltas_r = np.abs(np.array(joint_pos_r) - np.array(goal_pos_r))
-            for i, joint in enumerate(self.joints[7:]):
+            for i, joint in enumerate(self.joints):
                 delta = deltas_r[i]
                 if delta > self.config.joint_tolerance_warning:
                     logger.warning(f"🦾⚠️ Right arm position mismatch: {joint} {joint_pos_r[i]} {goal_pos_r[i]}")
