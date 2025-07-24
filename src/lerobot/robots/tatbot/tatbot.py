@@ -122,7 +122,7 @@ class Tatbot(Robot):
     def _get_positions_r(self) -> list[float]:
         return self._get_positions(self.arm_r, self.config.home_pos_r, "right")
 
-    def _set_positions(self, driver_handle, joints: list[float], goal_time: float, block: bool, label: str, get_error_str_func) -> None:
+    def _set_positions(self, driver_handle, joints: list[float], goal_time: float, label: str, get_error_str_func) -> None:
         if driver_handle is None:
             logger.warning(f"🦾❌ {label} arm is not connected.")
             return
@@ -131,15 +131,15 @@ class Tatbot(Robot):
                 logger.debug(f"🦾 Setting {label.lower()} arm positions: {joints}, goal_time: {goal_time}")
             if len(joints) != 7:
                 raise ValueError(f"🦾❌ {label} arm positions length mismatch: {len(joints)} != 7")
-            driver_handle.set_all_positions(trossen_arm.VectorDouble(joints), goal_time=goal_time, blocking=block)
+            driver_handle.set_all_positions(trossen_arm.VectorDouble(joints), goal_time=goal_time, blocking=True)
         except Exception as e:
             logger.warning(f"🦾❌ Failed to set {label.lower()} arm positions: \n{type(e)}:\n{e}\n{get_error_str_func()}")
 
-    def _set_positions_l(self, joints: list[float], goal_time: float, block: bool) -> None:
-        self._set_positions(self.arm_l, joints, goal_time, block, "left", self._get_error_str_l)
+    def _set_positions_l(self, joints: list[float], goal_time: float) -> None:
+        self._set_positions(self.arm_l, joints, goal_time, "left", self._get_error_str_l)
 
-    def _set_positions_r(self, joints: list[float], goal_time: float, block: bool) -> None:
-        self._set_positions(self.arm_r, joints, goal_time, block, "right", self._get_error_str_r)
+    def _set_positions_r(self, joints: list[float], goal_time: float) -> None:
+        self._set_positions(self.arm_r, joints, goal_time, "right", self._get_error_str_r)
 
     def _get_error_str_l(self) -> str:
         if self.arm_l is None:
@@ -302,14 +302,14 @@ class Tatbot(Robot):
         # then clear errors and go to home positions
         logger.info(f"🤖 {self} left arm going to home position.")
         self._connect_l()
-        self._set_positions_l(self.config.home_pos_l, self.config.goal_time, True)
+        self._set_positions_l(self.config.home_pos_l, self.config.goal_time)
         if self.arm_l is not None:
             self.arm_l.set_all_modes(trossen_arm.Mode.idle)
         logger.info(f"✅🦾 {self} left arm idle.")
 
         logger.info(f"🤖 {self} right arm going to home position.")
         self._connect_r()
-        self._set_positions_r(self.config.home_pos_r, self.config.goal_time, True)
+        self._set_positions_r(self.config.home_pos_r, self.config.goal_time)
         if self.arm_r is not None:
             self.arm_r.set_all_modes(trossen_arm.Mode.idle)
         logger.info(f"✅🦾 {self} right arm idle.")
