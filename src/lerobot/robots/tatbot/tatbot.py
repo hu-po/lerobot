@@ -33,6 +33,33 @@ class Tatbot(Robot):
         self.rs_cameras = make_cameras_from_configs(config.rs_cameras)
         self.ip_cameras = make_cameras_from_configs(config.ip_cameras)
 
+    @property
+    def _motors_ft(self) -> dict[str, type]:
+        return {f"{joint}.pos": float for joint in self.joints}
+
+    @property
+    def _cameras_ft(self) -> dict[str, tuple]:
+        _ft = {}
+        for cam_name in self.rs_cameras.keys():
+            _ft[cam_name] = (self.config.rs_cameras[cam_name].height, self.config.rs_cameras[cam_name].width, 3)
+        for cam_name in self.ip_cameras.keys():
+            _ft[cam_name] = (self.config.ip_cameras[cam_name].height, self.config.ip_cameras[cam_name].width, 3)
+        return _ft
+
+    @cached_property
+    def observation_features(self) -> dict[str, type | tuple]:
+        return {**self._motors_ft, **self._cameras_ft}
+
+    @cached_property
+    def action_features(self) -> dict[str, type]:
+        return self._motors_ft
+
+    def _urdf_joints_to_action(self, urdf_joints: list[float]) -> dict[str, float]:
+        _action = {f"{joint}.pos": urdf_joints[i] for i, joint in enumerate(self.joints)}
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug(f"🤖 Action: {_action}")
+        return _action
+
     def _connect_l(self, clear_error: bool = True) -> None:
         try:
             if logger.isEnabledFor(logging.DEBUG):
@@ -139,27 +166,6 @@ class Tatbot(Robot):
             return ""
 
     @property
-    def _motors_ft(self) -> dict[str, type]:
-        return {f"{joint}.pos": float for joint in self.joints}
-
-    @property
-    def _cameras_ft(self) -> dict[str, tuple]:
-        _ft = {}
-        for cam_name in self.rs_cameras.keys():
-            _ft[cam_name] = (self.config.rs_cameras[cam_name].height, self.config.rs_cameras[cam_name].width, 3)
-        for cam_name in self.ip_cameras.keys():
-            _ft[cam_name] = (self.config.ip_cameras[cam_name].height, self.config.ip_cameras[cam_name].width, 3)
-        return _ft
-
-    @cached_property
-    def observation_features(self) -> dict[str, type | tuple]:
-        return {**self._motors_ft, **self._cameras_ft}
-
-    @cached_property
-    def action_features(self) -> dict[str, type]:
-        return self._motors_ft
-
-    @property
     def is_connected(self) -> bool:
         return self.arm_l is not None and \
             self.arm_r is not None and \
@@ -241,12 +247,6 @@ class Tatbot(Robot):
                 logger.debug(f"{self} read {cam_key}: {dt_ms:.1f}ms")
             obs_dict[cam_key] = frame
         return obs_dict
-
-    def _urdf_joints_to_action(self, urdf_joints: list[float]) -> dict[str, float]:
-        _action = {f"{joint}.pos": urdf_joints[i] for i, joint in enumerate(self.joints)}
-        if logger.isEnabledFor(logging.DEBUG):
-            logger.debug(f"🤖 Action: {_action}")
-        return _action
         
     def _wait_for_arms(self, timeout: float | None = None, goal_pos_l: list[float] = None, goal_pos_r: list[float] = None, wait_left: bool = True, wait_right: bool = True) -> None:
         """Wait for arms to complete their movements.
@@ -373,13 +373,13 @@ class Tatbot(Robot):
         # then clear errors and go to home positions
         logger.info(f"🤖 {self} left arm going to home position.")
         self._connect_l()
-        self._set_positions_l(self.config.home_pos_l, goal_time=self.config.goal_time_fast)
+        self._set_positions_l(self.config.home_pos_l, goal_time=self.config.goal_time_slow)
         self.arm_l.set_all_modes(trossen_arm.Mode.idle)
         logger.info(f"✅🦾 {self} left arm idle.")
 
         logger.info(f"🤖 {self} right arm going to home position.")
         self._connect_r()
-        self._set_positions_r(self.config.home_pos_r, goal_time=self.config.goal_time_fast)
+        self._set_positions_r(self.config.home_pos_r, goal_time=self.config.goal_time_slow)
         self.arm_r.set_all_modes(trossen_arm.Mode.idle)
         logger.info(f"✅🦾 {self} right arm idle.")
 
