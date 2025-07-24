@@ -257,10 +257,10 @@ class Tatbot(Robot):
         
         # Issue both arm commands in parallel using threads
         def set_left_arm():
-            self._set_positions_l(goal_pos_l, goal_time, block=True)
+            self._set_positions_l(goal_pos_l, goal_time)
         
         def set_right_arm():
-            self._set_positions_r(goal_pos_r, goal_time, block=True)
+            self._set_positions_r(goal_pos_r, goal_time)
         
         left_thread = threading.Thread(target=set_left_arm)
         right_thread = threading.Thread(target=set_right_arm)
