@@ -29,16 +29,14 @@ class TatbotConfig(RobotConfig):
     home_pos_r: list[float]
     """Radian joint positions of the right arm: folded up, resting on itself, facing forwards."""
     
-    goal_time_fast: float
-    """Robot travel time when executing fast actions, usually small movements."""
-    goal_time_slow: float
-    """Robot travel time when moving slowly, usually larger movements."""
+    goal_time: float
+    """Default robot travel time."""
     connection_timeout: float 
     """Timeout when connecting to the robot arms in seconds."""
 
+    validate_positions: bool = False
+    """Whether to validate joint positions after movement completion."""
     joint_tolerance_warning: float = 1e-2
     """Warning tolerance for joint position mismatch."""
     joint_tolerance_error: float = 1.0
     """Error tolerance for joint position error."""
-    validate_positions: bool = False
-    """Whether to validate joint positions after movement completion."""
