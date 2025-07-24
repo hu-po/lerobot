@@ -303,13 +303,15 @@ class Tatbot(Robot):
         logger.info(f"🤖 {self} left arm going to home position.")
         self._connect_l()
         self._set_positions_l(self.config.home_pos_l, self.config.goal_time, True)
-        self.arm_l.set_all_modes(trossen_arm.Mode.idle)
+        if self.arm_l is not None:
+            self.arm_l.set_all_modes(trossen_arm.Mode.idle)
         logger.info(f"✅🦾 {self} left arm idle.")
 
         logger.info(f"🤖 {self} right arm going to home position.")
         self._connect_r()
         self._set_positions_r(self.config.home_pos_r, self.config.goal_time, True)
-        self.arm_r.set_all_modes(trossen_arm.Mode.idle)
+        if self.arm_r is not None:
+            self.arm_r.set_all_modes(trossen_arm.Mode.idle)
         logger.info(f"✅🦾 {self} right arm idle.")
 
         # disconnect cameras
