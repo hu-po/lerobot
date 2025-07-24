@@ -23,6 +23,8 @@ class TatbotConfig(RobotConfig):
     """YAML file containing left arm config."""
     arm_r_config_filepath: str
     """YAML file containing right arm config."""
+    arm_log_level: str = "INFO"
+    """Log level for trossen arm drivers. Options: DEBUG, INFO, WARNING, ERROR, CRITICAL."""
     
     home_pos_l: list[float]
     """Radian joint positions of the left arm: folded up, resting on itself, facing forwards."""

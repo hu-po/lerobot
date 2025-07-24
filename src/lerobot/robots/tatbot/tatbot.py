@@ -60,6 +60,47 @@ class Tatbot(Robot):
             logger.debug(f"🤖 Action: {_action}")
         return _action
 
+    def _configure_trossen_arm_logging(self) -> None:
+        """Configure logging for trossen arm drivers."""
+        try:
+            # Get the log level from config
+            log_level = getattr(logging, self.config.arm_log_level.upper(), logging.INFO)
+            
+            # Configure default logger
+            default_logger = logging.getLogger(trossen_arm.TrossenArmDriver.get_default_logger_name())
+            default_logger.setLevel(log_level)
+            
+            # Add handlers if not already present
+            if not default_logger.handlers:
+                default_logger.addHandler(logging.StreamHandler())
+            
+            # Configure left arm logger
+            left_logger = logging.getLogger(
+                trossen_arm.TrossenArmDriver.get_logger_name(
+                    trossen_arm.Model.wxai_v0,
+                    self.config.ip_address_l
+                )
+            )
+            left_logger.setLevel(log_level)
+            if not left_logger.handlers:
+                left_logger.addHandler(logging.StreamHandler())
+            
+            # Configure right arm logger
+            right_logger = logging.getLogger(
+                trossen_arm.TrossenArmDriver.get_logger_name(
+                    trossen_arm.Model.wxai_v0,
+                    self.config.ip_address_r
+                )
+            )
+            right_logger.setLevel(log_level)
+            if not right_logger.handlers:
+                right_logger.addHandler(logging.StreamHandler())
+                
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug(f"🦾 Configured trossen arm logging with level: {self.config.arm_log_level}")
+        except Exception as e:
+            logger.warning(f"🦾❌ Failed to configure trossen arm logging:\n{e}")
+
     def _connect_l(self, clear_error: bool = True) -> None:
         try:
             if logger.isEnabledFor(logging.DEBUG):
@@ -185,6 +226,7 @@ class Tatbot(Robot):
             except Exception as e:
                 logger.warning(f"🎥❌Failed to connect to camera: {cam}: \n{e}")
 
+        self._configure_trossen_arm_logging()
         left_thread = threading.Thread(target=lambda: self._connect_l())
         right_thread = threading.Thread(target=lambda: self._connect_r())
         left_thread.start()
