@@ -36,8 +36,6 @@ class TatbotConfig(RobotConfig):
     connection_timeout: float 
     """Timeout when connecting to the robot arms in seconds."""
 
-    validate_positions: bool = False
-    """Whether to validate joint positions after movement completion."""
     joint_tolerance_warning: float = 1e-2
     """Warning tolerance for joint position mismatch."""
     joint_tolerance_error: float = 1.0
