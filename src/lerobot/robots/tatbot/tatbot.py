@@ -178,13 +178,20 @@ class Tatbot(Robot):
                 cam.connect()
             except Exception as e:
                 logger.warning(f"🎥❌Failed to connect to camera: {cam}: \n{e}")
+
         for cam in self.ip_cameras.values():
             try:
                 cam.connect()
             except Exception as e:
                 logger.warning(f"🎥❌Failed to connect to camera: {cam}: \n{e}")
-        self._connect_l()
-        self._connect_r()
+
+        left_thread = threading.Thread(target=lambda: self._connect_l())
+        right_thread = threading.Thread(target=lambda: self._connect_r())
+        left_thread.start()
+        right_thread.start()
+        left_thread.join()
+        right_thread.join()
+
         self.configure()
         logger.info(f"✅🤖 {self} connected.")
 
@@ -256,15 +263,8 @@ class Tatbot(Robot):
         goal_pos_r = [goal_pos[joint] for joint in self.joints[7:]]
         
         # Issue both arm commands in parallel using threads
-        def set_left_arm():
-            self._set_positions_l(goal_pos_l, goal_time)
-        
-        def set_right_arm():
-            self._set_positions_r(goal_pos_r, goal_time)
-        
-        left_thread = threading.Thread(target=set_left_arm)
-        right_thread = threading.Thread(target=set_right_arm)
-        
+        left_thread = threading.Thread(target=lambda: self._set_positions_l(goal_pos_l, goal_time))
+        right_thread = threading.Thread(target=lambda: self._set_positions_r(goal_pos_r, goal_time))
         left_thread.start()
         right_thread.start()
         left_thread.join()
@@ -294,25 +294,38 @@ class Tatbot(Robot):
             logger.warning(f"❌🤖 {self} is not connected.")
 
         # first try and get the error strings
-        self._connect_l(clear_error=False)
-        logger.error(self._get_error_str_l())
-        self._connect_r(clear_error=False)
-        logger.error(self._get_error_str_r())
+        left_thread = threading.Thread(target=lambda: self._connect_l(clear_error=False))
+        right_thread = threading.Thread(target=lambda: self._connect_r(clear_error=False))
+        left_thread.start()
+        right_thread.start()
+        left_thread.join()
+        right_thread.join()
+        logger.error(f"🦾❌ Left arm error: {self._get_error_str_l()}")
+        logger.error(f"🦾❌ Right arm error: {self._get_error_str_r()}")
 
-        # then clear errors and go to home positions
-        logger.info(f"🤖 {self} left arm going to home position.")
-        self._connect_l()
-        self._set_positions_l(self.config.home_pos_l, self.config.goal_time)
+        # re-connect but clear errors
+        left_thread = threading.Thread(target=lambda: self._connect_l())
+        right_thread = threading.Thread(target=lambda: self._connect_r())
+        left_thread.start()
+        right_thread.start()
+        left_thread.join()
+        right_thread.join()
+
+        # send to home positions
+        left_thread = threading.Thread(target=lambda: self._set_positions_l(self.config.home_pos_l, self.config.goal_time))
+        right_thread = threading.Thread(target=lambda: self._set_positions_r(self.config.home_pos_r, self.config.goal_time))
+        left_thread.start()
+        right_thread.start()
+        left_thread.join()
+        right_thread.join()
+
+        # set arms to idle
         if self.arm_l is not None:
             self.arm_l.set_all_modes(trossen_arm.Mode.idle)
-        logger.info(f"✅🦾 {self} left arm idle.")
-
-        logger.info(f"🤖 {self} right arm going to home position.")
-        self._connect_r()
-        self._set_positions_r(self.config.home_pos_r, self.config.goal_time)
+            logger.info(f"✅🦾 {self} left arm idle.")
         if self.arm_r is not None:
             self.arm_r.set_all_modes(trossen_arm.Mode.idle)
-        logger.info(f"✅🦾 {self} right arm idle.")
+            logger.info(f"✅🦾 {self} right arm idle.")
 
         # disconnect cameras
         for cam in self.rs_cameras.values():
