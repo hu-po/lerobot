@@ -32,7 +32,7 @@ class Tatbot(Robot):
         self.arm_r = None
         self.rs_cameras = make_cameras_from_configs(config.rs_cameras)
         self.ip_cameras = make_cameras_from_configs(config.ip_cameras)
-        self.home_pos_full = self.config.home_pos_l + self.config.home_pos_r
+        self.home_pos_full = [*self.config.home_pos_l, *self.config.home_pos_r]
 
     @property
     def _motors_ft(self) -> dict[str, type]:
