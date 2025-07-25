@@ -332,20 +332,20 @@ class Tatbot(Robot):
             left_thread.join()
             right_thread.join()
 
-            for i, (goal_pos, curr_pos) in enumerate(zip(goal_pos_l, self._get_positions_l())):
-                delta = abs(goal_pos - curr_pos)
+            for i, (_goal_pos, _curr_pos) in enumerate(zip(goal_pos_l, self._get_positions_l())):
+                delta = abs(_goal_pos - _curr_pos)
                 if delta > self.config.joint_tolerance_warning:
-                    logger.warning(f"🦾⚠️ Left arm joint position {self.joints[i]} mismatch: {goal_pos} != {curr_pos}")
+                    logger.warning(f"🦾⚠️ Left arm joint position {self.joints[i]} mismatch: {_goal_pos} != {_curr_pos}")
                 if delta > self.config.joint_tolerance_error:
-                    logger.error(f"🦾❌ Left arm joint position {self.joints[i]} mismatch: {goal_pos} != {curr_pos}")
+                    logger.error(f"🦾❌ Left arm joint position {self.joints[i]} mismatch: {_goal_pos} != {_curr_pos}")
                     raise ValueError("Left arm joints mismatch")
 
-            for i, (goal_pos, curr_pos) in enumerate(zip(goal_pos_r, self._get_positions_r())):
-                delta = abs(goal_pos - curr_pos)
+            for i, (_goal_pos, _curr_pos) in enumerate(zip(goal_pos_r, self._get_positions_r())):
+                delta = abs(_goal_pos - _curr_pos)
                 if delta > self.config.joint_tolerance_warning:
-                    logger.warning(f"🦾⚠️ Right arm joint position {self.joints[i]} mismatch: {goal_pos} != {curr_pos}")
+                    logger.warning(f"🦾⚠️ Right arm joint position {self.joints[i]} mismatch: {_goal_pos} != {_curr_pos}")
                 if delta > self.config.joint_tolerance_error:
-                    logger.error(f"🦾❌ Right arm joint position {self.joints[i]} mismatch: {goal_pos} != {curr_pos}")
+                    logger.error(f"🦾❌ Right arm joint position {self.joints[i]} mismatch: {_goal_pos} != {_curr_pos}")
                     raise ValueError("Right arm joints mismatch")
         else:
             # non-blocking move call
