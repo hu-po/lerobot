@@ -41,3 +41,6 @@ class TatbotConfig(RobotConfig):
 
     arm_log_level: str = "INFO"
     """Log level for trossen arm drivers. Options: DEBUG, INFO, WARNING, ERROR, CRITICAL."""
+
+    max_workers: int | None = None
+    """Max number of worker threads in the thread pool. If None, it defaults to min(32, os.cpu_count() * 4)."""

@@ -1,9 +1,8 @@
 import logging
-import time
 from functools import cached_property
 from typing import Any
 import os
-import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import numpy as np
 from lerobot.cameras.utils import make_cameras_from_configs
@@ -33,6 +32,11 @@ class Tatbot(Robot):
         self.rs_cameras = make_cameras_from_configs(config.rs_cameras)
         self.ip_cameras = make_cameras_from_configs(config.ip_cameras)
         self.home_pos_full = [*self.config.home_pos_l, *self.config.home_pos_r]
+        
+        max_workers = self.config.max_workers
+        if max_workers is None:
+            max_workers = min(32, (os.cpu_count() or 1) * 4)
+        self._executor = ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="tatbot")
 
     @property
     def _motors_ft(self) -> dict[str, type]:
@@ -102,60 +106,53 @@ class Tatbot(Robot):
         except Exception as e:
             logger.warning(f"🦾❌ Failed to configure trossen arm logging:\n{e}")
 
-    def _connect_l(self, clear_error: bool = True) -> None:
-        try:
-            if logger.isEnabledFor(logging.DEBUG):
-                logger.debug(f"🦾 Connecting to {self} left arm")
-            self.arm_l = trossen_arm.TrossenArmDriver()
-            self.arm_l.configure(
-                trossen_arm.Model.wxai_v0,
-                trossen_arm.StandardEndEffector.wxai_v0_base,
-                self.config.ip_address_l,
-                clear_error,
-                timeout=self.config.connection_timeout,
-            )
-            config_filepath = os.path.expanduser(self.config.arm_l_config_filepath)
-            if logger.isEnabledFor(logging.DEBUG):
-                logger.debug(f"🦾 Loading left arm config from {config_filepath}")
-            self.arm_l.load_configs_from_file(config_filepath)
-            self.arm_l.set_all_modes(trossen_arm.Mode.position)
-            self._set_positions_l(self.config.home_pos_l, self.config.goal_time)
-        except Exception as e:
-            logger.warning(f"🦾❌ Failed to connect to {self} left arm:\n{e}")
-            self.arm_l = None
-        logger.info(f"✅🦾 {self} left arm connected.")
+    def _connect_arm(self, side: str, clear_error: bool = True) -> None:
+        """Connects to a single arm (left or right)."""
+        if side not in ("left", "right"):
+            raise ValueError(f"Invalid side: {side}")
 
-    def _connect_r(self, clear_error: bool = True) -> None:
+        ip_address = self.config.ip_address_l if side == "left" else self.config.ip_address_r
+        config_filepath = self.config.arm_l_config_filepath if side == "left" else self.config.arm_r_config_filepath
+        home_pos = self.config.home_pos_l if side == "left" else self.config.home_pos_r
+        
         try:
-            if logger.isEnabledFor(logging.DEBUG):
-                logger.debug(f"🦾 Connecting to {self} right arm")
-            self.arm_r = trossen_arm.TrossenArmDriver()
-            self.arm_r.configure(
+            logger.debug(f"🦾 Connecting to {self} {side} arm")
+            arm = trossen_arm.TrossenArmDriver()
+            arm.configure(
                 trossen_arm.Model.wxai_v0,
                 trossen_arm.StandardEndEffector.wxai_v0_base,
-                self.config.ip_address_r,
+                ip_address,
                 clear_error,
                 timeout=self.config.connection_timeout,
             )
-            config_filepath = os.path.expanduser(self.config.arm_r_config_filepath)
-            if logger.isEnabledFor(logging.DEBUG):
-                logger.debug(f"🦾 Loading right arm config from {config_filepath}")
-            self.arm_r.load_configs_from_file(config_filepath)
-            self.arm_r.set_all_modes(trossen_arm.Mode.position)
-            self._set_positions_r(self.config.home_pos_r, self.config.goal_time)
-        except Exception as e:
-            logger.warning(f"🦾❌ Failed to connect to {self} right arm:\n{e}")
-            self.arm_r = None
-        logger.info(f"✅🦾 {self} right arm connected.")
+            expanded_config_filepath = os.path.expanduser(config_filepath)
+            logger.debug(f"🦾 Loading {side} arm config from {expanded_config_filepath}")
+            arm.load_configs_from_file(expanded_config_filepath)
+            arm.set_all_modes(trossen_arm.Mode.position)
+
+            # Set arm attribute (self.arm_l or self.arm_r)
+            setattr(self, f"arm_{side[0]}", arm)
+            
+            # Use the corresponding _set_positions method
+            if side == "left":
+                self._set_positions_l(home_pos, self.config.goal_time)
+            else:
+                self._set_positions_r(home_pos, self.config.goal_time)
+
+            logger.info(f"✅🦾 {self} {side} arm connected.")
+        except Exception:
+            logger.exception(f"🦾❌ Failed to connect to {self} {side} arm")
+            setattr(self, f"arm_{side[0]}", None)
 
     def _connect_arms(self, clear_error: bool = True) -> None:
         self._configure_trossen_arm_logging()
-        left_thread = threading.Thread(target=lambda: self._connect_l(clear_error))
-        right_thread = threading.Thread(target=lambda: self._connect_r(clear_error))
-        left_thread.start()
-        right_thread.start()
-        left_thread.join()
-        right_thread.join()
+        futures = [
+            self._executor.submit(self._connect_arm, "left", clear_error),
+            self._executor.submit(self._connect_arm, "right", clear_error),
+        ]
+        # Wait for completion and re-raise any exceptions
+        for future in as_completed(futures):
+            future.result()
 
     def _get_positions(self, driver_handle, fallback_pose: list[float], label: str) -> list[float]:
         if driver_handle is None:
@@ -208,45 +205,24 @@ class Tatbot(Robot):
     def _get_error_str_r(self) -> str:
         return self._get_error_str(self.arm_r, "right")
 
-    def _connect_cameras(self) -> None:
-
-        def connect_camera(cam):
+    def _for_each_camera(self, fn_name: str) -> None:
+        """Helper to run a method on each camera concurrently."""
+        all_cameras = list(self.rs_cameras.values()) + list(self.ip_cameras.values())
+        
+        def cam_op(camera):
             try:
-                cam.connect()
+                getattr(camera, fn_name)()
             except Exception as e:
-                logger.warning(f"🎥❌ Failed to connect to {cam}:\n{e}")
+                logger.warning(f"🎥❌ Camera {fn_name} failed for {camera}: {e}")
 
-        camera_threads = []
-        for cam in self.rs_cameras.values():
-            thread = threading.Thread(target=connect_camera, args=(cam,))
-            camera_threads.append(thread)
-            thread.start()
-        for cam in self.ip_cameras.values():
-            thread = threading.Thread(target=connect_camera, args=(cam,))
-            camera_threads.append(thread)
-            thread.start()
-        for thread in camera_threads:
-            thread.join()
+        # map consumes the iterator, ensuring all tasks run and complete
+        self._executor.map(cam_op, all_cameras)
+
+    def _connect_cameras(self) -> None:
+        self._for_each_camera("connect")
 
     def _disconnect_cameras(self) -> None:
-
-        def disconnect_camera(cam):
-            try:
-                cam.disconnect()
-            except Exception as e:
-                logger.warning(f"🎥❌ Failed to disconnect from {cam}:\n{e}")
-
-        camera_threads = []
-        for cam in self.rs_cameras.values():
-            thread = threading.Thread(target=disconnect_camera, args=(cam,))
-            camera_threads.append(thread)
-            thread.start()
-        for cam in self.ip_cameras.values():
-            thread = threading.Thread(target=disconnect_camera, args=(cam,))
-            camera_threads.append(thread)
-            thread.start()
-        for thread in camera_threads:
-            thread.join()
+        self._for_each_camera("disconnect")
 
     @property
     def is_connected(self) -> bool:
@@ -274,43 +250,38 @@ class Tatbot(Robot):
     def configure(self) -> None:
         pass
 
+    def _read_frame(self, cam_key: str, cam: Any) -> tuple[str, np.ndarray]:
+        """Reads a frame from a single camera, handling errors gracefully."""
+        try:
+            frame = cam.async_read()
+        except Exception as e:
+            logger.warning(f"❌🎥 Failed to read {cam_key}: {e}")
+            frame = np.zeros((cam.height, cam.width, 3), dtype=np.uint8)
+        return cam_key, frame
+
     def get_observation(self, full: bool = False) -> dict[str, Any]:
         if not self.is_connected:
             logger.warning(f"❌🤖 {self} is not connected.")
 
         joint_pos_l = self._get_positions_l()
         joint_pos_r = self._get_positions_r()
-        obs_dict = {}
-        obs_dict.update({f"{j}.pos": v for j, v in zip(self.joints, joint_pos_l + joint_pos_r)})
+        obs_dict = {f"{j}.pos": v for j, v in zip(self.joints, joint_pos_l + joint_pos_r)}
+
+        cameras_to_read = self.rs_cameras.items()
+        if full:
+            cameras_to_read = list(self.rs_cameras.items()) + list(self.ip_cameras.items())
+
+        futures = {
+            self._executor.submit(self._read_frame, key, cam): key for key, cam in cameras_to_read
+        }
 
         camera_frames = {}
-
-        def read_camera_frame(cam_key, cam):
-            try:
-                frame = cam.async_read()
-            except Exception as e:
-                logger.warning(f"❌🎥 Failed to read {cam_key}:\n{e}")
-                frame = np.zeros((cam.height, cam.width, 3), dtype=np.uint8)
-            camera_frames[cam_key] = frame
-        
-        camera_threads = []
-        for cam_key, cam in self.rs_cameras.items():
-            thread = threading.Thread(target=read_camera_frame, args=(cam_key, cam))
-            camera_threads.append(thread)
-            thread.start()
-
-        if full:
-            for cam_key, cam in self.ip_cameras.items():
-                thread = threading.Thread(target=read_camera_frame, args=(cam_key, cam))
-                camera_threads.append(thread)
-                thread.start()
-        
-        for thread in camera_threads:
-            thread.join()
+        for future in as_completed(futures):
+            key, frame = future.result()
+            camera_frames[key] = frame
         
         obs_dict.update(camera_frames)
         return obs_dict
-
 
     def send_action(self, action: dict[str, Any], goal_time: float = None, safe: bool = False) -> dict[str, Any]:
         if not self.is_connected:
@@ -323,14 +294,14 @@ class Tatbot(Robot):
         goal_pos_l = [goal_pos[joint] for joint in self.joints[:7]]
         goal_pos_r = [goal_pos[joint] for joint in self.joints[7:]]
 
+        # For non-blocking, just submit the tasks. They will run in the background.
+        future_l = self._executor.submit(self._set_positions_l, goal_pos_l, goal_time, block=safe)
+        future_r = self._executor.submit(self._set_positions_r, goal_pos_r, goal_time, block=safe)
+
         if safe:
-            # blocking move call with position validation
-            left_thread = threading.Thread(target=lambda: self._set_positions_l(goal_pos_l, goal_time, block=True))
-            right_thread = threading.Thread(target=lambda: self._set_positions_r(goal_pos_r, goal_time, block=True))
-            left_thread.start()
-            right_thread.start()
-            left_thread.join()
-            right_thread.join()
+            # For blocking calls, wait for their results and propagate errors
+            future_l.result()
+            future_r.result()
 
             for i, (_goal_pos, _curr_pos) in enumerate(zip(goal_pos_l, self._get_positions_l())):
                 delta = abs(_goal_pos - _curr_pos)
@@ -347,18 +318,16 @@ class Tatbot(Robot):
                 if delta > self.config.joint_tolerance_error:
                     logger.error(f"🦾❌ Right arm joint position {self.joints[i]} mismatch: {_goal_pos} != {_curr_pos}")
                     raise ValueError("Right arm joints mismatch")
-        else:
-            # non-blocking move call
-            left_thread = threading.Thread(target=lambda: self._set_positions_l(goal_pos_l, goal_time))
-            right_thread = threading.Thread(target=lambda: self._set_positions_r(goal_pos_r, goal_time))
-            left_thread.start()
-            right_thread.start()
             
         return {f"{joint}.pos": val for joint, val in goal_pos.items()}
 
     def disconnect(self):
         if not self.is_connected:
             logger.warning(f"❌🤖 {self} is not connected.")
+            # Still try to shut down the pool
+            if hasattr(self, "_executor"):
+                self._executor.shutdown(wait=True)
+            return
 
         # first try and get the error strings
         self._connect_arms(clear_error=False)
@@ -378,4 +347,7 @@ class Tatbot(Robot):
             logger.info(f"✅🦾 {self} right arm idle.")
 
         self._disconnect_cameras()
-        logger.info(f"✅🤖 {self} disconnected.")
+
+        logger.info(f"🤖 Shutting down thread pool...")
+        self._executor.shutdown(wait=True)
+        logger.info(f"✅🤖 {self} disconnected and thread pool shut down.")
