@@ -349,5 +349,5 @@ class Tatbot(Robot):
         self._disconnect_cameras()
 
         logger.info(f"🤖 Shutting down thread pool...")
-        self._executor.shutdown(wait=True)
+        self._executor.shutdown(wait=False)
         logger.info(f"✅🤖 {self} disconnected and thread pool shut down.")
