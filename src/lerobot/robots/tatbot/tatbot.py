@@ -34,8 +34,6 @@ class Tatbot(Robot):
         self.home_pos_full = [*self.config.home_pos_l, *self.config.home_pos_r]
         
         max_workers = self.config.max_workers
-        if max_workers is None:
-            max_workers = min(32, (os.cpu_count() or 1) * 4)
         self._executor = ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="tatbot")
 
     @property
@@ -299,9 +297,8 @@ class Tatbot(Robot):
         future_r = self._executor.submit(self._set_positions_r, goal_pos_r, goal_time, block=safe)
 
         if safe:
-            # For blocking calls, wait for their results and propagate errors
-            future_l.result()
-            future_r.result()
+            for future in as_completed([future_l, future_r]):
+                future.result()
 
             for i, (_goal_pos, _curr_pos) in enumerate(zip(goal_pos_l, self._get_positions_l())):
                 delta = abs(_goal_pos - _curr_pos)
@@ -324,10 +321,6 @@ class Tatbot(Robot):
     def disconnect(self):
         if not self.is_connected:
             logger.warning(f"❌🤖 {self} is not connected.")
-            # Still try to shut down the pool
-            if hasattr(self, "_executor"):
-                self._executor.shutdown(wait=True)
-            return
 
         # first try and get the error strings
         self._connect_arms(clear_error=False)
