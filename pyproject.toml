@@ -110,7 +110,7 @@ intelrealsense = [
     "pyrealsense2>=2.55.1.6486 ; sys_platform != 'darwin'",
     "pyrealsense2-macosx>=2.54 ; sys_platform == 'darwin'",
 ]
-tatbot = ["trossen-arm==1.8.3"]
+tatbot = ["trossen-arm==1.8.5"]
 # stretch = [
 #     "hello-robot-stretch-body>=0.7.27 ; sys_platform == 'linux'",
 #     "pyrender @ git+https://github.com/mmatl/pyrender.git ; sys_platform == 'linux'",
