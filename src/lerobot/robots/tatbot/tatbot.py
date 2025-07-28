@@ -187,20 +187,20 @@ class Tatbot(Robot):
     def _set_positions_r(self, joints: list[float], goal_time: float, block: bool = False) -> None:
         self._set_positions(self.arm_r, joints, goal_time, "right", self._get_error_str_r, block)
 
-    def _get_error_str(self, driver_handle, label: str) -> str:
+    def _get_error_str(self, driver_handle, label: str) -> str | None:
         if driver_handle is None:
             logger.warning(f"🦾❌ {label} arm is not connected.")
-            return ""
+            return None
         try:
             return driver_handle.get_error_information()
         except Exception as e:
             logger.warning(f"🦾❌ Failed to get {label} arm error:\n{e}")
-            return ""
+            return None
 
-    def _get_error_str_l(self) -> str:
+    def _get_error_str_l(self) -> str | None:
         return self._get_error_str(self.arm_l, "left")
         
-    def _get_error_str_r(self) -> str:
+    def _get_error_str_r(self) -> str | None:
         return self._get_error_str(self.arm_r, "right")
 
     def _for_each_camera(self, fn_name: str) -> None:
@@ -322,13 +322,22 @@ class Tatbot(Robot):
         if not self.is_connected:
             logger.warning(f"❌🤖 {self} is not connected.")
 
-        # first try and get the error strings
-        self._connect_arms(clear_error=False)
-        logger.error(f"🦾❌ Left arm error: {self._get_error_str_l()}")
-        logger.error(f"🦾❌ Right arm error: {self._get_error_str_r()}")
+        # first try and shutdown the arms gracefully
+        if self.arm_l is not None:
+            self.arm_l.cleanup()
+        if self.arm_r is not None:
+            self.arm_r.cleanup()
 
-        # re-connect but clear errors
-        self._connect_arms()
+        # then try and get the error strings
+        error_str_l = self._get_error_str_l()
+        if error_str_l is not None:
+            logger.error(f"🦾❌ Left arm error: {error_str_l}")
+        error_str_r = self._get_error_str_r()
+        if error_str_r is not None:
+            logger.error(f"🦾❌ Right arm error: {error_str_r}")
+
+        # re-connect and send to home pose
+        self._connect_arms(clear_error=True)
         self.send_action(self._urdf_joints_to_action(self.home_pos_full), safe=True)
 
         # set arms to idle
