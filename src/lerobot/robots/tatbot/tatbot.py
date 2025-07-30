@@ -281,7 +281,7 @@ class Tatbot(Robot):
         obs_dict.update(camera_frames)
         return obs_dict
 
-    def send_action(self, action: dict[str, Any], goal_time: float = None, safe: bool = False) -> dict[str, Any]:
+    def send_action(self, action: dict[str, Any], goal_time: float = None, safe: bool = False, left_first: bool = True) -> dict[str, Any]:
         if not self.is_connected:
             logger.warning(f"❌🤖 {self} is not connected.")
 
@@ -292,9 +292,12 @@ class Tatbot(Robot):
         goal_pos_l = [goal_pos[joint] for joint in self.joints[:7]]
         goal_pos_r = [goal_pos[joint] for joint in self.joints[7:]]
 
-        # For non-blocking, just submit the tasks. They will run in the background.
-        future_l = self._executor.submit(self._set_positions_l, goal_pos_l, goal_time, block=safe)
-        future_r = self._executor.submit(self._set_positions_r, goal_pos_r, goal_time, block=safe)
+        if left_first:
+            future_l = self._executor.submit(self._set_positions_l, goal_pos_l, goal_time, block=safe)
+            future_r = self._executor.submit(self._set_positions_r, goal_pos_r, goal_time, block=safe)
+        else:
+            future_r = self._executor.submit(self._set_positions_r, goal_pos_r, goal_time, block=safe)
+            future_l = self._executor.submit(self._set_positions_l, goal_pos_l, goal_time, block=safe)
 
         if safe:
             for future in as_completed([future_l, future_r]):
