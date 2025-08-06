@@ -2,7 +2,9 @@ import logging
 from functools import cached_property
 from typing import Any
 import os
-from concurrent.futures import ThreadPoolExecutor, as_completed
+import time
+import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError
 
 import numpy as np
 from lerobot.cameras.utils import make_cameras_from_configs
@@ -35,6 +37,10 @@ class Tatbot(Robot):
         
         max_workers = self.config.max_workers
         self._executor = ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="tatbot")
+        
+        # Thread safety for disconnect
+        self._disconnect_lock = threading.Lock()
+        self._disconnected = False
 
     @property
     def _motors_ft(self) -> dict[str, type]:
@@ -321,38 +327,362 @@ class Tatbot(Robot):
             
         return {f"{joint}.pos": val for joint, val in goal_pos.items()}
 
-    def disconnect(self):
-        if not self.is_connected:
-            logger.warning(f"❌🤖 {self} is not connected.")
+    def disconnect(self, reboot_controller: bool = False):
+        """
+        Thread-safe, re-entrant disconnect sequence following Trossen best practices.
+        ALWAYS ensures arms return to sleep pose via reconnect if needed.
+        Can be called multiple times safely and handles various error states.
+        """
+        with self._disconnect_lock:
+            if self._disconnected:
+                logger.info(f"🤖 {self} already disconnected")
+                return
+            try:
+                self._disconnect_impl(reboot_controller)
+            finally:
+                self._disconnected = True
 
-        # first try and shutdown the arms gracefully
+    def _disconnect_impl(self, reboot_controller: bool = False):
+        """Implementation of disconnect sequence."""
+        logger.info(f"🤖 Starting robust disconnect sequence for {self}")
+        start_time = time.time()
+        
+        try:
+            # Phase 0: One clean reconnect attempt if link is already dead
+            if not self._check_arm_responsiveness():
+                logger.info("🦾 Link lost – trying one clean reconnect to park the arm")
+                try:
+                    self._connect_arms(clear_error=True)
+                    time.sleep(self.config.reboot_wait_time)
+                except Exception as e:
+                    logger.warning(f"🦾⚠️ Initial reconnect failed: {e}")
+            
+            # Phase 1: Stop all motion immediately (safety first)
+            self._emergency_stop_all_motion()
+            
+            # Phase 2: Ensure clean reconnection and return to sleep pose
+            self._ensure_sleep_pose_via_reconnect()
+            
+            # Phase 3: Final cleanup and shutdown
+            self._final_cleanup_and_shutdown(reboot_controller)
+            
+        except Exception as e:
+            logger.error(f"🤖❌ Disconnect sequence failed: {e}")
+            # Always try final emergency cleanup
+            self._emergency_cleanup()
+        
+        elapsed = time.time() - start_time
+        logger.info(f"✅🤖 {self} disconnect sequence completed in {elapsed:.1f}s")
+
+    def _emergency_stop_all_motion(self):
+        """Phase 1: Immediately stop all arm motion for safety."""
+        logger.debug("🤖 Phase 1: Emergency stop all motion")
+        
+        def stop_arm_motion(arm, label, current_positions):
+            if arm is not None:
+                try:
+                    # Hold current position instead of going limp for safety
+                    logger.debug(f"🦾 Emergency stopping {label} arm motion")
+                    arm.set_all_positions(
+                        trossen_arm.VectorDouble(current_positions), 
+                        goal_time=0.1,  # Very short time to hold position
+                        blocking=False
+                    )
+                    logger.info(f"✅🦾 {label} arm motion stopped and holding position")
+                except Exception as e:
+                    logger.warning(f"🦾⚠️ Failed to stop {label} arm motion, falling back to idle: {e}")
+                    try:
+                        # Fallback to idle if position hold fails
+                        arm.set_all_modes(trossen_arm.Mode.idle)
+                    except Exception:
+                        pass
+
+        # Get current positions for holding
+        current_pos_l = self._get_positions_l()
+        current_pos_r = self._get_positions_r()
+        
+        # Stop both arms concurrently for maximum speed
+        futures = []
         if self.arm_l is not None:
-            self.arm_l.cleanup()
+            futures.append(self._executor.submit(stop_arm_motion, self.arm_l, "Left", current_pos_l))
         if self.arm_r is not None:
-            self.arm_r.cleanup()
+            futures.append(self._executor.submit(stop_arm_motion, self.arm_r, "Right", current_pos_r))
+        
+        # Wait for all stops to complete with timeout
+        try:
+            for future in as_completed(futures, timeout=5.0):
+                future.result()
+        except TimeoutError:
+            logger.warning("🦾⚠️ Emergency stop timed out, continuing...")
 
-        # then try and get the error strings
-        error_str_l = self._get_error_str_l()
-        if error_str_l is not None:
-            logger.error(f"🦾❌ Left arm error: {error_str_l}")
-        error_str_r = self._get_error_str_r()
-        if error_str_r is not None:
-            logger.error(f"🦾❌ Right arm error: {error_str_r}")
+    def _ensure_sleep_pose_via_reconnect(self):
+        """
+        Phase 2: ALWAYS ensure arms return to sleep pose.
+        Reconnects if needed to guarantee this critical safety requirement.
+        """
+        logger.debug("🤖 Phase 2: Ensuring sleep pose via reconnect")
+        
+        max_attempts = 3
+        for attempt in range(max_attempts):
+            logger.info(f"🦾 Sleep pose attempt {attempt + 1}/{max_attempts}")
+            
+            # Check if arms are responsive for sleep pose movement
+            arms_responsive = self._check_arm_responsiveness()
+            
+            if not arms_responsive and attempt < max_attempts - 1:
+                logger.info(f"🦾🔄 Arms not responsive (attempt {attempt + 1}); reconnecting...")
+                try:
+                    # Clear current connections
+                    self._force_cleanup_connections()
+                    
+                    # Reconnect with error clearing
+                    self._connect_arms(clear_error=True)
+                    
+                    # Allow time for connection stabilization
+                    time.sleep(self.config.reboot_wait_time)
+                    
+                    # Re-check responsiveness
+                    arms_responsive = self._check_arm_responsiveness()
+                    
+                except Exception as e:
+                    logger.warning(f"🦾⚠️ Reconnection attempt {attempt + 1} failed: {e}")
+                    continue
+            
+            # Attempt to move to sleep pose
+            if arms_responsive:
+                try:
+                    logger.info("🦾 Moving arms to sleep pose")
+                    
+                    # CRITICAL: Switch from idle back to position mode before movement
+                    for arm in (self.arm_l, self.arm_r):
+                        if arm is not None:
+                            arm.set_all_modes(trossen_arm.Mode.position)
+                    
+                    self.send_action(
+                        self._urdf_joints_to_action(self.home_pos_full),
+                        goal_time=self.config.goal_time * 2.0,  # Extra time for reliability
+                        safe=True  # Block and verify positions
+                    )
+                    logger.info("✅🦾 Arms successfully moved to sleep pose")
+                    return  # Success - exit the retry loop
+                    
+                except Exception as e:
+                    logger.warning(f"🦾⚠️ Sleep pose movement failed (attempt {attempt + 1}): {e}")
+                    if attempt < max_attempts - 1:
+                        continue  # Try again
+            else:
+                logger.warning(f"🦾⚠️ Arms still not responsive after reconnect (attempt {attempt + 1})")
+        
+        # If we get here, all attempts failed
+        logger.error("🦾❌ Failed to ensure sleep pose after all attempts")
+        logger.error("🦾❌ SAFETY WARNING: Arms may not be in safe position")
 
-        # re-connect and send to home pose
-        self._connect_arms(clear_error=True)
-        self.send_action(self._urdf_joints_to_action(self.home_pos_full), safe=True)
+    def _force_cleanup_connections(self):
+        """Force cleanup of existing arm connections."""
+        logger.debug("🦾 Force cleaning up existing connections")
+        
+        def force_cleanup_arm(arm, label):
+            if arm is not None:
+                try:
+                    # Try normal cleanup first
+                    arm.cleanup()
+                except Exception:
+                    try:
+                        # Try cleanup with reboot
+                        arm.cleanup(reboot_controller=True)
+                        # Wait for reboot to complete
+                        time.sleep(self.config.reboot_wait_time)
+                    except Exception as e:
+                        logger.warning(f"🦾⚠️ Force cleanup failed for {label} arm: {e}")
 
-        # set arms to idle
+        # Force cleanup both arms
+        futures = []
         if self.arm_l is not None:
-            self.arm_l.set_all_modes(trossen_arm.Mode.idle)
-            logger.info(f"✅🦾 {self} left arm idle.")
+            futures.append(self._executor.submit(force_cleanup_arm, self.arm_l, "Left"))
         if self.arm_r is not None:
-            self.arm_r.set_all_modes(trossen_arm.Mode.idle)
-            logger.info(f"✅🦾 {self} right arm idle.")
+            futures.append(self._executor.submit(force_cleanup_arm, self.arm_r, "Right"))
+        
+        # Wait for cleanups with timeout
+        try:
+            for future in as_completed(futures, timeout=10.0):
+                future.result()
+        except TimeoutError:
+            logger.warning("🦾⚠️ Force cleanup timed out")
+        
+        # Clear references
+        self.arm_l = None
+        self.arm_r = None
 
-        self._disconnect_cameras()
+    def _check_arm_responsiveness(self) -> bool:
+        """Check if arms are responsive to commands."""
+        try:
+            # Try to get positions from connected arms
+            responsive_count = 0
+            total_arms = 0
+            
+            if self.arm_l is not None:
+                total_arms += 1
+                try:
+                    self._get_positions_l()
+                    responsive_count += 1
+                except Exception:
+                    pass
+                    
+            if self.arm_r is not None:
+                total_arms += 1
+                try:
+                    self._get_positions_r()
+                    responsive_count += 1
+                except Exception:
+                    pass
+            
+            # Both connected arms must be responsive
+            is_responsive = total_arms > 0 and responsive_count == total_arms
+            logger.debug(f"🦾 Arm responsiveness: {responsive_count}/{total_arms} arms responsive")
+            return is_responsive
+            
+        except Exception as e:
+            logger.debug(f"🦾 Arms not responsive: {e}")
+            return False
 
-        logger.info(f"🤖 Shutting down thread pool...")
-        self._executor.shutdown(wait=False)
-        logger.info(f"✅🤖 {self} disconnected and thread pool shut down.")
+    def _final_cleanup_and_shutdown(self, reboot_controller: bool = False):
+        """Phase 3: Final cleanup and system shutdown."""
+        logger.debug("🤖 Phase 3: Final cleanup and shutdown")
+        
+        # Set arms to idle mode one final time
+        self._set_final_idle_mode()
+        
+        # Clean up arm connections
+        self._cleanup_arm_connections(reboot_controller)
+        
+        # Shutdown system components
+        self._shutdown_system()
+
+    def _set_final_idle_mode(self):
+        """Set arms to idle mode for final shutdown."""
+        logger.debug("🦾 Setting arms to final idle mode")
+        
+        def set_arm_idle(arm, label):
+            if arm is not None:
+                try:
+                    arm.set_all_modes(trossen_arm.Mode.idle)
+                    logger.info(f"✅🦾 {label} arm set to final idle")
+                except Exception as e:
+                    logger.warning(f"🦾⚠️ Failed to set {label} arm to final idle: {e}")
+
+        # Set both arms to idle
+        futures = []
+        if self.arm_l is not None:
+            futures.append(self._executor.submit(set_arm_idle, self.arm_l, "Left"))
+        if self.arm_r is not None:
+            futures.append(self._executor.submit(set_arm_idle, self.arm_r, "Right"))
+        
+        # Wait for completion with timeout
+        try:
+            for future in as_completed(futures, timeout=5.0):
+                future.result()
+        except TimeoutError:
+            logger.warning("🦾⚠️ Final idle mode setting timed out")
+
+    def _cleanup_arm_connections(self, reboot_controller: bool = False):
+        """Clean up arm driver connections with error reporting."""
+        logger.debug("🦾 Cleaning up arm connections")
+        
+        def cleanup_arm(arm, label):
+            if arm is not None:
+                try:
+                    # Log any final errors
+                    error_info = arm.get_error_information()
+                    if error_info and error_info.strip():
+                        logger.info(f"🦾 {label} arm final status: {error_info}")
+                    
+                    # Normal cleanup
+                    arm.cleanup(reboot_controller=reboot_controller)
+                    logger.info(f"✅🦾 {label} arm connection cleaned up")
+                    
+                except Exception as e:
+                    logger.warning(f"🦾⚠️ Normal cleanup failed for {label} arm: {e}")
+
+        # Cleanup both arms
+        futures = []
+        if self.arm_l is not None:
+            futures.append(self._executor.submit(cleanup_arm, self.arm_l, "Left"))
+        if self.arm_r is not None:
+            futures.append(self._executor.submit(cleanup_arm, self.arm_r, "Right"))
+        
+        # Wait for all cleanups
+        try:
+            for future in as_completed(futures, timeout=10.0):
+                future.result()
+        except TimeoutError:
+            logger.warning("🦾⚠️ Cleanup timed out, forcing shutdown")
+        
+        # Clear references
+        self.arm_l = None
+        self.arm_r = None
+
+    def _shutdown_system(self):
+        """Shutdown cameras and thread pool."""
+        logger.debug("🤖 System shutdown")
+        
+        # Disconnect cameras with retries
+        for attempt in range(2):
+            try:
+                self._disconnect_cameras()
+                logger.info("✅🎥 Cameras disconnected")
+                break
+            except Exception as e:
+                if attempt == 0:
+                    logger.warning(f"🎥⚠️ Camera disconnect failed, retrying: {e}")
+                    time.sleep(1.0)
+                else:
+                    logger.error(f"🎥❌ Camera disconnect failed after retries: {e}")
+        
+        # Graceful thread pool shutdown
+        try:
+            logger.debug("🧵 Shutting down thread pool gracefully")
+            self._executor.shutdown(wait=True, cancel_futures=True)
+            logger.info("✅🧵 Thread pool shut down gracefully")
+        except Exception as e:
+            logger.warning(f"🧵⚠️ Graceful shutdown failed: {e}")
+            try:
+                self._executor.shutdown(wait=False, cancel_futures=True)
+                logger.info("🧵 Thread pool force shutdown completed")
+            except Exception as force_e:
+                logger.error(f"🧵❌ Force shutdown failed: {force_e}")
+
+    def _emergency_cleanup(self):
+        """Emergency cleanup when all else fails."""
+        logger.warning("🤖🚨 Performing emergency cleanup")
+        
+        try:
+            # Force stop any remaining motion
+            if self.arm_l is not None:
+                try:
+                    self.arm_l.set_all_modes(trossen_arm.Mode.idle)
+                except Exception:
+                    pass
+            if self.arm_r is not None:
+                try:
+                    self.arm_r.set_all_modes(trossen_arm.Mode.idle)
+                except Exception:
+                    pass
+            
+            # Force cleanup with reboot
+            self._force_cleanup_connections()
+            
+            # Force shutdown cameras and thread pool
+            try:
+                self._disconnect_cameras()
+            except Exception:
+                pass
+            
+            try:
+                self._executor.shutdown(wait=False, cancel_futures=True)
+            except Exception:
+                pass
+                
+            logger.warning("🤖🚨 Emergency cleanup completed")
+            
+        except Exception as e:
+            logger.error(f"🤖❌ Emergency cleanup failed: {e}")

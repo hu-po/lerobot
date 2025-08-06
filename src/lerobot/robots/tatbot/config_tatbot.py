@@ -44,3 +44,8 @@ class TatbotConfig(RobotConfig):
 
     max_workers: int = 16
     """Max number of worker threads in the thread pool. If None, it defaults to min(32, os.cpu_count() * 4)."""
+
+    disconnect_timeout: float = 12.0
+    """Total timeout for disconnect sequence in seconds."""
+    reboot_wait_time: float = 2.0
+    """Time to wait after controller reboot before attempting reconnection."""
