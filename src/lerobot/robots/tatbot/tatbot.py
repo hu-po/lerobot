@@ -38,9 +38,10 @@ class Tatbot(Robot):
         max_workers = self.config.max_workers
         self._executor = ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="tatbot")
         
-        # Thread safety for disconnect
+        # Thread safety locks
+        self._connect_lock = threading.Lock()
         self._disconnect_lock = threading.Lock()
-        self._disconnected = False
+        self._connected = False  # Start disconnected
 
     @property
     def _motors_ft(self) -> dict[str, type]:
@@ -236,13 +237,48 @@ class Tatbot(Robot):
             all(cam.is_connected for cam in self.ip_cameras.values())
 
     def connect(self, calibrate: bool = True) -> None:
-        if self.is_connected:
-            logger.info(f"✅🤖 {self} already connected.")
-            return
-        self._connect_cameras()
-        self._connect_arms()
-        self.configure()
-        logger.info(f"✅🤖 {self} connected.")
+        """
+        Connects to the robot in a transactional manner with thread safety.
+        If any part of the connection fails, it triggers a full disconnect
+        to ensure the robot is left in a clean state.
+        """
+        with self._connect_lock:
+            if self.is_connected:
+                logger.info(f"✅🤖 {self} already connected.")
+                return
+
+            try:
+                logger.info(f"🤖 Starting connection sequence for {self}")
+                
+                # Create fresh thread pool if needed (after disconnect)
+                if self._executor is None:
+                    logger.debug("🧵 Creating fresh thread pool for reconnection")
+                    self._executor = ThreadPoolExecutor(
+                        max_workers=self.config.max_workers, 
+                        thread_name_prefix="tatbot"
+                    )
+                
+                self._connect_cameras()
+                self._connect_arms()
+                self.configure()
+                
+                # Final check to ensure all components are truly responsive
+                if not self._check_arm_responsiveness():
+                    raise RuntimeError("Arms connected but not responsive.")
+                    
+                # Set connected flag on successful connection
+                self._connected = True
+                logger.info(f"✅🤖 {self} connected and responsive.")
+
+            except Exception as e:
+                logger.error(f"🤖❌ Connection failed: {e}")
+                logger.error("🤖 Triggering full disconnect to ensure clean state...")
+                try:
+                    self.disconnect()
+                except Exception as disconnect_error:
+                    logger.error(f"🤖❌ Disconnect during failed connection also failed: {disconnect_error}")
+                # Re-raise the exception so the caller knows the connection failed
+                raise
 
     @property
     def is_calibrated(self) -> bool:
@@ -288,8 +324,14 @@ class Tatbot(Robot):
         return obs_dict
 
     def send_action(self, action: dict[str, Any], goal_time: float = None, safe: bool = False, left_first: bool = True) -> dict[str, Any]:
-        if not self.is_connected:
-            logger.warning(f"❌🤖 {self} is not connected.")
+        """
+        Sends an action to the robot after proactively checking for arm responsiveness.
+        Uses robust checks and fail-fast behavior for reliable operation.
+        """
+        # Use the robust responsiveness check instead of just is_connected
+        if not self._check_arm_responsiveness():
+            logger.error("🦾❌ Cannot send action: Arms are not responsive.")
+            raise RuntimeError("Cannot send action to non-responsive arms.")
 
         goal_time = self.config.goal_time if goal_time is None else goal_time
         goal_pos = {key.removesuffix(".pos"): val for key, val in action.items() if key.endswith(".pos")}
@@ -298,34 +340,53 @@ class Tatbot(Robot):
         goal_pos_l = [goal_pos[joint] for joint in self.joints[:7]]
         goal_pos_r = [goal_pos[joint] for joint in self.joints[7:]]
 
-        if left_first:
-            future_l = self._executor.submit(self._set_positions_l, goal_pos_l, goal_time, block=safe)
-            future_r = self._executor.submit(self._set_positions_r, goal_pos_r, goal_time, block=safe)
-        else:
-            future_r = self._executor.submit(self._set_positions_r, goal_pos_r, goal_time, block=safe)
-            future_l = self._executor.submit(self._set_positions_l, goal_pos_l, goal_time, block=safe)
+        try:
+            if left_first:
+                future_l = self._executor.submit(self._set_positions_l, goal_pos_l, goal_time, block=safe)
+                future_r = self._executor.submit(self._set_positions_r, goal_pos_r, goal_time, block=safe)
+            else:
+                future_r = self._executor.submit(self._set_positions_r, goal_pos_r, goal_time, block=safe)
+                future_l = self._executor.submit(self._set_positions_l, goal_pos_l, goal_time, block=safe)
 
-        if safe:
-            for future in as_completed([future_l, future_r]):
-                future.result()
+            if safe:
+                # Wait for both arms to complete
+                for future in as_completed([future_l, future_r]):
+                    future.result()
 
-            for i, (_goal_pos, _curr_pos) in enumerate(zip(goal_pos_l, self._get_positions_l())):
-                delta = abs(_goal_pos - _curr_pos)
-                if delta > self.config.joint_tolerance_warning:
-                    logger.warning(f"🦾⚠️ Left arm joint position {self.joints[i]} mismatch: {_goal_pos} != {_curr_pos}")
-                if delta > self.config.joint_tolerance_error:
-                    logger.error(f"🦾❌ Left arm joint position {self.joints[i]} mismatch: {_goal_pos} != {_curr_pos}")
-                    raise ValueError("Left arm joints mismatch")
-
-            for i, (_goal_pos, _curr_pos) in enumerate(zip(goal_pos_r, self._get_positions_r())):
-                delta = abs(_goal_pos - _curr_pos)
-                if delta > self.config.joint_tolerance_warning:
-                    logger.warning(f"🦾⚠️ Right arm joint position {self.joints[i]} mismatch: {_goal_pos} != {_curr_pos}")
-                if delta > self.config.joint_tolerance_error:
-                    logger.error(f"🦾❌ Right arm joint position {self.joints[i]} mismatch: {_goal_pos} != {_curr_pos}")
-                    raise ValueError("Right arm joints mismatch")
+                # Verify positions with detailed error reporting
+                self._verify_action_completion(goal_pos_l, goal_pos_r)
+                
+        except Exception as e:
+            logger.error(f"🦾❌ Action execution failed: {e}")
+            # Re-check responsiveness after failure
+            if not self._check_arm_responsiveness():
+                logger.error("🦾❌ Arms became unresponsive during action execution")
+            raise
             
         return {f"{joint}.pos": val for joint, val in goal_pos.items()}
+
+    def _verify_action_completion(self, goal_pos_l: list[float], goal_pos_r: list[float]) -> None:
+        """Verify that the commanded positions were actually reached."""
+        # Check left arm positions
+        current_pos_l = self._get_positions_l()
+        for i, (goal_pos, curr_pos) in enumerate(zip(goal_pos_l, current_pos_l)):
+            delta = abs(goal_pos - curr_pos)
+            if delta > self.config.joint_tolerance_warning:
+                logger.warning(f"🦾⚠️ Left arm joint {self.joints[i]} position mismatch: goal={goal_pos:.3f}, actual={curr_pos:.3f}, delta={delta:.3f}")
+            if delta > self.config.joint_tolerance_error:
+                logger.error(f"🦾❌ Left arm joint {self.joints[i]} position error: goal={goal_pos:.3f}, actual={curr_pos:.3f}, delta={delta:.3f}")
+                raise ValueError(f"Left arm joint {self.joints[i]} position error exceeds tolerance")
+
+        # Check right arm positions  
+        current_pos_r = self._get_positions_r()
+        for i, (goal_pos, curr_pos) in enumerate(zip(goal_pos_r, current_pos_r)):
+            delta = abs(goal_pos - curr_pos)
+            joint_idx = i + 7  # Right arm joints start at index 7
+            if delta > self.config.joint_tolerance_warning:
+                logger.warning(f"🦾⚠️ Right arm joint {self.joints[joint_idx]} position mismatch: goal={goal_pos:.3f}, actual={curr_pos:.3f}, delta={delta:.3f}")
+            if delta > self.config.joint_tolerance_error:
+                logger.error(f"🦾❌ Right arm joint {self.joints[joint_idx]} position error: goal={goal_pos:.3f}, actual={curr_pos:.3f}, delta={delta:.3f}")
+                raise ValueError(f"Right arm joint {self.joints[joint_idx]} position error exceeds tolerance")
 
     def disconnect(self, reboot_controller: bool = False):
         """
@@ -334,13 +395,13 @@ class Tatbot(Robot):
         Can be called multiple times safely and handles various error states.
         """
         with self._disconnect_lock:
-            if self._disconnected:
+            if not self._connected:
                 logger.info(f"🤖 {self} already disconnected")
                 return
             try:
                 self._disconnect_impl(reboot_controller)
             finally:
-                self._disconnected = True
+                self._connected = False
 
     def _disconnect_impl(self, reboot_controller: bool = False):
         """Implementation of disconnect sequence."""
@@ -386,7 +447,7 @@ class Tatbot(Robot):
                     arm.set_all_positions(
                         trossen_arm.VectorDouble(current_positions), 
                         goal_time=0.1,  # Very short time to hold position
-                        blocking=False
+                        blocking=True   # Wait for command to be accepted
                     )
                     logger.info(f"✅🦾 {label} arm motion stopped and holding position")
                 except Exception as e:
@@ -638,18 +699,29 @@ class Tatbot(Robot):
                 else:
                     logger.error(f"🎥❌ Camera disconnect failed after retries: {e}")
         
-        # Graceful thread pool shutdown
+        # Graceful thread pool shutdown with Python 3.8 compatibility
         try:
             logger.debug("🧵 Shutting down thread pool gracefully")
-            self._executor.shutdown(wait=True, cancel_futures=True)
+            try:
+                # Python 3.9+ supports cancel_futures
+                self._executor.shutdown(wait=True, cancel_futures=True)
+            except TypeError:
+                # Fallback for Python 3.8
+                self._executor.shutdown(wait=True)
             logger.info("✅🧵 Thread pool shut down gracefully")
         except Exception as e:
             logger.warning(f"🧵⚠️ Graceful shutdown failed: {e}")
             try:
-                self._executor.shutdown(wait=False, cancel_futures=True)
+                try:
+                    self._executor.shutdown(wait=False, cancel_futures=True)
+                except TypeError:
+                    self._executor.shutdown(wait=False)
                 logger.info("🧵 Thread pool force shutdown completed")
             except Exception as force_e:
                 logger.error(f"🧵❌ Force shutdown failed: {force_e}")
+        finally:
+            # Clear executor reference to enable hot reconnection
+            self._executor = None
 
     def _emergency_cleanup(self):
         """Emergency cleanup when all else fails."""
@@ -678,7 +750,11 @@ class Tatbot(Robot):
                 pass
             
             try:
-                self._executor.shutdown(wait=False, cancel_futures=True)
+                try:
+                    self._executor.shutdown(wait=False, cancel_futures=True)
+                except TypeError:
+                    self._executor.shutdown(wait=False)
+                self._executor = None
             except Exception:
                 pass
                 
