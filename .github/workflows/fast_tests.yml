@@ -28,15 +28,7 @@ on:
       - ".github/workflows/**"
       - "pyproject.toml"
       - "Makefile"
-  push:
-    branches:
-      - main
-    paths:
-      - "src/**"
-      - "tests/**"
-      - ".github/workflows/**"
-      - "pyproject.toml"
-      - "Makefile"
+  # Removed push trigger to prevent running on every push
 
 permissions:
   contents: read
