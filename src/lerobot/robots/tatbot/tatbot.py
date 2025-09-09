@@ -323,7 +323,7 @@ class Tatbot(Robot):
         obs_dict.update(camera_frames)
         return obs_dict
 
-    def send_action(self, action: dict[str, Any], goal_time: float = None, safe: bool = False, left_first: bool = True) -> dict[str, Any]:
+    def send_action(self, action: dict[str, Any], goal_time: float = None, safe: bool = False, left_first: bool = True, verify: bool = False) -> dict[str, Any]:
         """
         Sends an action to the robot after proactively checking for arm responsiveness.
         Uses robust checks and fail-fast behavior for reliable operation.
@@ -354,7 +354,8 @@ class Tatbot(Robot):
                     future.result()
 
                 # Verify positions with detailed error reporting
-                self._verify_action_completion(goal_pos_l, goal_pos_r)
+                if verify:
+                    self._verify_action_completion(goal_pos_l, goal_pos_r)
                 
         except Exception as e:
             logger.error(f"🦾❌ Action execution failed: {e}")
