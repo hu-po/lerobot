@@ -65,6 +65,10 @@ def make_robot_from_config(config: RobotConfig) -> Robot:
         from .tatbot import Tatbot
 
         return Tatbot(config)
+    elif config.type == "reachy2":
+        from .reachy2 import Reachy2Robot
+
+        return Reachy2Robot(config)
     elif config.type == "mock_robot":
         from tests.mocks.mock_robot import MockRobot
 
@@ -74,7 +78,7 @@ def make_robot_from_config(config: RobotConfig) -> Robot:
 
 
 def ensure_safe_goal_position(
-    goal_present_pos: dict[str, tuple[float, float]], max_relative_target: float | dict[float]
+    goal_present_pos: dict[str, tuple[float, float]], max_relative_target: float | dict[str, float]
 ) -> dict[str, float]:
     """Caps relative action target magnitude for safety."""
 
